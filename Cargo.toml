@@ -24,7 +24,7 @@ pwhash = "1"
 user-agent-parser = { version = "0.3.6", features = ["rocket"] }
 enum-kinds = "0.5.1"
 diesel = { version = "2.2.6", features = ["mysql_backend", "mysql", "r2d2", "chrono"] }
-mail-send = "0.4.7"
+lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls"] }
 rocket_cors = "0.6.0"
 tera = "1.19.1"
 lazy_static = "1.4.0"

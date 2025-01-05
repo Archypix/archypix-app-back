@@ -2,8 +2,11 @@ use lazy_static::lazy_static;
 use std::env;
 
 use crate::utils::utils::get_frontend_host;
-use mail_send::mail_builder::MessageBuilder;
-use mail_send::SmtpClientBuilder;
+use lettre::message::header::ContentType;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncSmtpTransport, AsyncTransport, Message, SmtpTransport, Tokio1Executor, Transport};
+use lettre::message::{MultiPart, SinglePart};
+use lettre::transport::smtp::client::Tls;
 use rocket::serde::json::from_str;
 use tera::{Context, Tera};
 use tokio::task;
@@ -38,6 +41,7 @@ fn render_email_context(template: String, mut context: Context) -> String {
 
 /// Sends an email with the provided raw text and HTML content
 fn send_email(to: (String, String), subject: String, body_text: String, body_html: String) {
+    //send_email_async(to, subject, body_text, body_html)
     task::spawn(send_email_async(to, subject, body_text, body_html));
 }
 
@@ -47,29 +51,36 @@ async fn send_email_async(to: (String, String), subject: String, body_text: Stri
     let server_port: u16 = env::var("SMTP_SERVER_PORT")
         .map(|port| from_str::<u16>(port.as_str()).unwrap_or(465)).unwrap_or(465);
     let from_name: String = env::var("SMTP_FROM_NAME").expect("SMTP_FROM_NAME must be set");
+    let from_address: String = env::var("SMTP_FROM_ADDRESS").expect("SMTP_FROM_NAME must be set");
     let username: String = env::var("SMTP_USERNAME").expect("SMTP_USERNAME must be set");
     let password: String = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
 
-    let message = MessageBuilder::new()
-        .from((from_name, username.clone()))
-        .to(vec![to.clone()])
+    let email = Message::builder()
+        .from(format!("{} <{}>", from_name, from_address).parse().unwrap())
+        .to(format!("{} <{}>", to.0, to.1).parse().unwrap())
         .subject(subject)
-        .text_body(body_text)
-        .html_body(body_html);
+        .multipart(
+            MultiPart::alternative()
+                .singlepart(
+                    SinglePart::builder()
+                        .header(ContentType::TEXT_PLAIN)
+                        .body(body_text),
+                )
+                .singlepart(
+                    SinglePart::builder()
+                        .header(ContentType::TEXT_HTML)
+                        .body(body_html),
+                ),
+        )
+        .expect("Failed to build email");
 
-    let connect = SmtpClientBuilder::new(server, server_port)
-        .implicit_tls(false)
-        .credentials((username, password))
-        .connect()
-        .await;
+    let mailer = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(server.as_str())
+        .timeout(Some(std::time::Duration::from_secs(10)))
+        .credentials(Credentials::new(username, password))
+        .build();
 
-    if connect.is_err() {
-        eprintln!("Failed to connect to SMTP server: {:?}", connect.err().unwrap());
-    }else{
-        if let Err(e) = connect.unwrap().send(message).await {
-            eprintln!("Failed to send email: {:?}", e);
-        }else{
-            println!("Email sent successfully to: {} [{}]", to.0, to.1);
-        }
+    match mailer.send(email).await {
+        Ok(_) => println!("Email successfully sent to: {} <{}>", to.0, to.1),
+        Err(e) => panic!("Could not send email: {e:?}"),
     }
 }
