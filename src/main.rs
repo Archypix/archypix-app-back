@@ -9,6 +9,7 @@ use crate::api::auth::status::{auth_status, okapi_add_operation_for_auth_status_
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
 use crate::utils::utils::{get_backend_host, get_frontend_host};
+use crate::api::picture::{add_picture, get_picture, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
 use rocket::http::Method;
@@ -18,8 +19,12 @@ use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDoc
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use user_agent_parser::UserAgentParser;
+use crate::picture_storer::picture_file_storer::PictureFileStorer;
+use crate::picture_storer::picture_storer::{PictureStorer};
 
 mod api {
+    pub mod picture;
+
     pub mod admin {
         pub mod admin;
     }
@@ -51,14 +56,19 @@ mod ftp_server {
 mod grouping {
     pub mod grouping_strategy;
 }
+mod mailing {
+    pub mod mailer;
+}
+mod picture_storer {
+    pub mod picture_storer;
+    pub mod picture_s3_storer;
+    pub mod picture_file_storer;
+}
 mod utils {
     pub mod utils;
     pub mod errors_catcher;
     pub mod validation;
     pub mod auth;
-}
-mod mailing {
-    pub mod mailer;
 }
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
@@ -74,11 +84,15 @@ async fn rocket() -> _ {
     let res = conn.run_pending_migrations(MIGRATIONS).unwrap();
     println!("Migrations result: {:?}", res);
 
+    // Load PictureStorer
+    let picture_storer = PictureStorer::from(PictureFileStorer::new("./pictures/".to_string()));
+
     rocket::build()
         .attach(cors_options())
+        .manage(picture_storer)
         .manage(get_connection_pool())
         .manage(UserAgentParser::from_path("./static/user_agent_regexes.yaml").unwrap())
-        .mount("/", openapi_get_routes![auth_signup, auth_signin, auth_signin_email, auth_status, auth_confirm_code, auth_confirm_token])
+        .mount("/", openapi_get_routes![auth_signup, auth_signin, auth_signin_email, auth_status, auth_confirm_code, auth_confirm_token, add_picture, get_picture])
         .register("/", catchers![bad_request, unauthorized, not_found, unprocessable_entity, internal_error])
         .mount(
             "/swagger-ui/",

@@ -39,7 +39,9 @@ pub struct Picture {
     pub f_number: Option<BigDecimal>,
 }
 
-impl Picture {}
+impl Picture {
+
+}
 
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
