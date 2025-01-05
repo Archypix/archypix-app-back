@@ -1,0 +1,34 @@
+version: '3.3'
+services:
+  archypix-app-db:
+    image: mysql:8.4
+    container_name: archypix-app-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: archypix
+      MYSQL_DATABASE: archypix
+      MYSQL_USER: archypix
+      MYSQL_PASSWORD: archypix
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./db:/var/lib/mysql
+
+  archypix-app-back:
+    build: .
+    image: archypix-app-back
+    container_name: archypix-app-back
+    restart: unless-stopped
+    depends_on:
+      - archypix-app-db
+    ports:
+      - "8000:80"
+    environment:
+      - DATABASE_URL=mysql://user:password@host:3306/database
+      - SMTP_SERVER=$SMTP_SERVER
+      - SMTP_SERVER_PORT=$SMTP_SERVER_PORT
+      - SMTP_FROM_NAME=$SMTP_FROM_NAME
+      - SMTP_USERNAME=$SMTP_USERNAME
+      - SMTP_PASSWORD=$SMTP_PASSWORD
+      - FRONTEND_HOST=$FRONTEND_HOST
+      - BACKEND_HOST=$BACKEND_HOST
