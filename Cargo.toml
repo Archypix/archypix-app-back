@@ -33,3 +33,4 @@ rocket_okapi = { version = "0.9.0", features = ["swagger", "rapidoc"] }
 schemars = "0.8.21"
 strum = "0.26.3"
 strum_macros = "0.26.4"
+rexiv2 = "0.10.0"

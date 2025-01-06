@@ -2,7 +2,7 @@ use rocket::{Data, State};
 use rocket::data::ToByteUnit;
 use rocket::form::Form;
 use rocket::fs::{NamedFile, TempFile};
-use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
 use rocket_okapi::{openapi, JsonSchema};
@@ -11,6 +11,7 @@ use rocket_okapi::okapi::openapi3;
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
 use serde::Deserialize;
+use crate::database::database::{DBConn, DBPool};
 use crate::database::user::User;
 use crate::picture_storer::picture_file_storer::PictureFileStorer;
 use crate::picture_storer::picture_storer::{PictureStorer};
@@ -42,20 +43,30 @@ impl JsonSchema for UploadPictureData<'_> {
 /// the User Request Guard.
 #[openapi(tag = "Picture")]
 #[post("/picture", data = "<upload>")]
-pub async fn add_picture(mut upload: Form<UploadPictureData<'_>>, user: User, picture_storer: &State<PictureStorer>) -> Result<Json<UploadPictureResponse>, ErrorResponder> {
+pub async fn add_picture(mut upload: Form<UploadPictureData<'_>>, db: &rocket::State<DBPool>, user: User, picture_storer: &State<PictureStorer>) -> Result<Json<UploadPictureResponse>, ErrorResponder> {
+    let conn: &mut DBConn = &mut db.get().unwrap();
+
     let file_name = upload.name.clone();
-    // TODO: read the file exif data
+    let bytes = &upload.file.open().into_bytes().await.or(ErrorType::UnprocessableEntity.res_err())?;
 
-    // TODO: save the file
-    picture_storer.store_picture(0, upload.into_inner()).await.or(ErrorType::UnprocessableEntity.res_err())?;
+    // EXIF data
+    let meta = rexiv2::Metadata::new_from_buffer(bytes)?;
 
-    // TODO: add the picture to the database
+    err_transaction(conn, |conn| {
 
-    // TODO: add the picture to its matching groups.
+        // Adding the picture to the database
 
-    Ok(Json(UploadPictureResponse {
-        name: "test".to_string(),
-    }))
+
+        // TODO: add the picture to its matching groups.
+
+        // Saving the file
+        picture_storer.store_picture(0, upload.into_inner()).await.is_err()
+
+        Ok(Json(UploadPictureResponse {
+            name: "test".to_string(),
+        }))
+
+    })
 }
 
 
