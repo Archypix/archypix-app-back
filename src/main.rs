@@ -67,6 +67,7 @@ mod picture_storer {
 mod utils {
     pub mod utils;
     pub mod errors_catcher;
+    pub mod exif;
     pub mod validation;
     pub mod auth;
 }

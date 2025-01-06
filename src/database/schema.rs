@@ -1,4 +1,4 @@
-use diesel::sql_types::{Binary, Nullable, SqlType, VarChar};
+use diesel::sql_types::{Binary, Json, Nullable, SqlType, VarChar};
 use diesel::{allow_tables_to_appear_in_same_query, joinable, table};
 use diesel_derives::define_sql_function;
 use rocket_okapi::JsonSchema;
@@ -119,7 +119,7 @@ table! {
 joinable!(tags -> tag_groups (tag_group_id));
 allow_tables_to_appear_in_same_query!(tags, tag_groups);
 
-#[derive(Debug, PartialEq, diesel_derive_enum::DbEnum)]
+#[derive(Debug, PartialEq, JsonSchema, diesel_derive_enum::DbEnum, Clone, Deserialize, Serialize)]
 pub enum PictureOrientation {
     Unspecified,
     Normal,
@@ -147,7 +147,7 @@ table! {
         edition_date -> Datetime,
         latitude -> Nullable<Decimal>,
         longitude -> Nullable<Decimal>,
-        altitude -> Nullable<SmallInt>,
+        altitude -> Nullable<Unsigned<SmallInt>>,
         orientation -> PictureOrientationMapping,
         width -> Unsigned<SmallInt>,
         height -> Unsigned<SmallInt>,

@@ -49,7 +49,7 @@ impl AuthToken {
         // Working in UTC time.
         let current_naive = Utc::now().naive_utc();
         if current_naive - self.last_use_date > TimeDelta::try_minutes(10).unwrap() {
-            println!("Updating last_use_date");
+            println!("Updating last_use_date of auth_token for user {}", self.user_id);
             update(auth_tokens::table)
                 .filter(auth_tokens::dsl::user_id.eq(self.user_id))
                 .filter(auth_tokens::dsl::token.eq(self.token.clone()))

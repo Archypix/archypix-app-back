@@ -1,27 +1,23 @@
-use std::path::Path;
-use diesel::BoolExpressionMethods;
-use rocket::fs::{NamedFile};
-use crate::api::picture::UploadPictureData;
-use crate::picture_storer::picture_storer::{PictureStorerTrait};
+use crate::picture_storer::picture_storer::PictureStorerTrait;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use diesel::BoolExpressionMethods;
+use rocket::fs::NamedFile;
+use std::path::Path;
 
 pub struct PictureFileStorer {
-    save_path: String
+    save_path: String,
 }
 
-impl PictureFileStorer{
+impl PictureFileStorer {
     pub fn new(save_path: String) -> Self {
-        PictureFileStorer {
-            save_path
-        }
+        PictureFileStorer { save_path }
     }
 }
 
 impl PictureStorerTrait for PictureFileStorer {
-    async fn store_picture(&self, picture_id: u64, mut upload: UploadPictureData<'_>) -> Result<(), ErrorResponder> {
-        upload.file.persist_to(Path::new(self.save_path.as_str()).join(picture_id.to_string()))
-            .await
-            .or(ErrorType::InternalError("Failed to save the file".to_string()).res_err())?;
+    async fn store_picture(&self, picture_id: u64, temp_path: &Path) -> Result<(), ErrorResponder> {
+        let path = Path::new(self.save_path.as_str()).join(picture_id.to_string());
+        std::fs::copy(temp_path, path).or(ErrorType::UnableToSaveFile.res_err())?;
         Ok(())
     }
 

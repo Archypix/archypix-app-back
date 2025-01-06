@@ -1,17 +1,20 @@
-use bigdecimal::{BigDecimal, FromPrimitive};
-use chrono::NaiveDateTime;
-use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
-use diesel::dsl::insert_into;
-use rocket::http::ext::IntoCollection;
-use crate::database::auth_token::Confirmation;
 use crate::database::database::DBConn;
-use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use crate::database::schema::PictureOrientation;
 use crate::database::schema::*;
 use crate::database::user::User;
-use crate::database::utils::is_error_duplicate_key;
+use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use bigdecimal::BigDecimal;
+use chrono::{Duration, NaiveDateTime, TimeDelta, Utc};
+use diesel::dsl::insert_into;
+use diesel::update;
+use diesel::{delete, QueryDsl, SelectableHelper};
+use diesel::{select, Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
+use diesel::{ExpressionMethods, OptionalExtension};
+use diesel_derives::Insertable;
+use rocket_okapi::JsonSchema;
+use serde::Serialize;
 
-#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
+#[derive(Queryable, Selectable, Identifiable, Associations, Insertable, JsonSchema, Serialize, Debug, PartialEq, Clone)]
 #[diesel(primary_key(id))]
 #[diesel(belongs_to(User, foreign_key = owner_id))]
 #[diesel(table_name = pictures)]
@@ -45,78 +48,47 @@ pub struct Picture {
 }
 
 impl Picture {
-    fn gps_val_to_big_decimal(gps_val: Option<f64>, angle_max: i32, decimals: i64) -> Option<BigDecimal> {
-        if let Some(gps_val) = gps_val {
-            let bd = BigDecimal::from_f64(gps_val);
-            if let Some(bd) = bd {
-                // Apply a modulo between -angle_max and angle_max
-                return Some(((bd + BigDecimal::from(angle_max)) % BigDecimal::from(angle_max * 2) - BigDecimal::from(angle_max)).with_scale(decimals));
-            }
-        }
-        None
-
-    }
     pub fn insert(conn: &mut DBConn, user_id: u32, name: String, metadata: rexiv2::Metadata) -> Result<Picture, ErrorResponder> {
-        let exposure_time = metadata.get_tag_rational("Exif.Photo.ExposureIndex");
-        let creation_date = metadata.get_tag_string("Exif.Image.DateTimeOriginal").map(|s| s.as_str()).unwrap_or("");
-        let edition_date = metadata.get_tag_string("Exif.Image.DateTime").map(|s| s.as_str()).unwrap_or("");
+        let mut picture = Picture::from(metadata);
+        picture.owner_id = user_id;
+        picture.author_id = user_id;
+        picture.name = name;
 
-        let gps_info = metadata.get_gps_info();
-        let latitude = Self::gps_val_to_big_decimal(gps_info.map(|g| g.latitude), 90, 6);
-        let longitude = Self::gps_val_to_big_decimal(gps_info.map(|g| g.longitude), 180, 6);
-        let altitude = gps_info.map(|g| g.altitude as u16);
-
-        let latitude_ref = metadata.get_tag_string("Exif.GPSInfo.GPSLatitudeRef").unwrap_or("N".to_string()).eq("N");
-        let longitude_ref = metadata.get_tag_string("Exif.GPSInfo.GPSLongitudeRef").unwrap_or("E".to_string()).eq("E");
-
-        let latitude = metadata.get_tag_rational("Exif.GPSInfo.GPSLatitude").map(|r| {
-            BigDecimal::from(if latitude_ref { 1 } else { -1 } * r)
-        });
-        let longitude = metadata.get_tag_rational("Exif.GPSInfo.GPSLongitude").map(|r| {
-            BigDecimal::from(if longitude_ref { 1 } else { -1 } * r)
-        });
-        let altitude = metadata.get_tag_rational("Exif.GPSInfo.GPSAltitude").map(|r| {
-            (r.numer() / r.denom()) as u16
-        });
-
-        let picture = Picture {
-            id: 0,
-            name,
-            comment: metadata.get_tag_string("Exif.Image.ImageDescription").unwrap_or("".to_string()),
-            owner_id: user_id,
-            author_id: user_id,
-            deleted_date: None,
-            copied: false,
-            creation_date: NaiveDateTime::parse_from_str(edition_date, "yyyy:MM:dd HH:mm:ss").unwrap_or(NaiveDateTime::default()),
-            edition_date: NaiveDateTime::parse_from_str(edition_date, "yyyy:MM:dd HH:mm:ss").unwrap_or(NaiveDateTime::default()),
-            latitude,
-            longitude,
-            altitude,
-            orientation: PictureOrientation::Normal,
-            width: metadata.get_pixel_width() as u16,
-            height: metadata.get_pixel_height() as u16,
-            camera_brand: metadata.get_tag_string("Exif.Photo.Make").ok(),
-            camera_model: metadata.get_tag_string("Exif.Photo.Model").ok(),
-            focal_length: metadata.get_tag_rational("Exif.Photo.FocalLengthIn35mmFilm").map(|f| BigDecimal::from(f)),
-            exposure_time_num: exposure_time.map(|r| *r.numer() as u32),
-            exposure_time_den: exposure_time.map(|r| *r.denom() as u32),
-            iso_speed: Some(metadata.get_tag_numeric("Exif.Photo.ISOSpeed") as u32),
-            f_number: metadata.get_tag_rational("Exif.Photo.FNumber").map(|f| BigDecimal::from(f)),
-        };
-
-        let inserted_count = insert_into(pictures::table)
-            .values(&picture)
+        let p = picture.clone();
+        let _ = insert_into(pictures::table)
             .values((
-                pictures::dsl::id.eq(None),
-                ))
+                pictures::dsl::name.eq::<String>(p.name),
+                pictures::dsl::comment.eq::<String>(p.comment),
+                pictures::dsl::owner_id.eq(p.owner_id),
+                pictures::dsl::author_id.eq(p.author_id),
+                pictures::dsl::deleted_date.eq(p.deleted_date),
+                pictures::dsl::copied.eq(p.copied),
+                pictures::dsl::creation_date.eq(p.creation_date),
+                pictures::dsl::edition_date.eq(p.edition_date),
+                pictures::dsl::latitude.eq(p.latitude),
+                pictures::dsl::longitude.eq(p.longitude),
+                pictures::dsl::altitude.eq(p.altitude),
+                pictures::dsl::orientation.eq(p.orientation),
+                pictures::dsl::width.eq(p.width),
+                pictures::dsl::height.eq(p.height),
+                pictures::dsl::camera_brand.eq(p.camera_brand),
+                pictures::dsl::camera_model.eq(p.camera_model),
+                pictures::dsl::focal_length.eq(p.focal_length),
+                pictures::dsl::exposure_time_num.eq(p.exposure_time_num),
+                pictures::dsl::exposure_time_den.eq(p.exposure_time_den),
+                pictures::dsl::iso_speed.eq(p.iso_speed),
+                pictures::dsl::f_number.eq(p.f_number),
+            ))
             .execute(conn)
-            .or_else(|e| {
-                ErrorType::DatabaseError("Failed to insert confirmation".to_string(), e).res_err_rollback()
-            })?;
+            .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res_rollback())?;
 
+        picture.id = select(last_insert_id())
+            .get_result::<u64>(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get last insert id".to_string(), e).res_rollback())?;
+
+        Ok(picture)
     }
 }
-
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
 #[diesel(primary_key(user_id, picture_id))]

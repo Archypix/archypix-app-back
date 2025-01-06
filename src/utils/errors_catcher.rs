@@ -2,6 +2,7 @@ use crate::database::database::DBConn;
 use diesel::result::Error;
 use diesel::Connection;
 use enum_kinds::EnumKind;
+use rexiv2::Rexiv2Error;
 use rocket::serde::json::Json;
 use rocket::Request;
 use rocket_okapi::gen::OpenApiGenerator;
@@ -92,6 +93,11 @@ pub enum ErrorType {
     UserNotAdmin,
     // Database error
     DatabaseError(String, Error),
+    // Pictures and files
+    UnableToLoadExifMetadata(Rexiv2Error),
+    UnableToSaveFile,
+    UnableToDeleteFile,
+    UnableToRetrieveFile,
 }
 
 impl ErrorType {
@@ -144,6 +150,11 @@ impl ErrorType {
             ErrorType::UserNotAdmin => ErrorResponder::Unauthorized(Self::create_response("User is not an admin".to_string(), kind, rollback)),
             // Database error
             ErrorType::DatabaseError(msg, err) => ErrorResponder::InternalError(Self::create_response(format!("Database error: {} - {}", msg, err), kind, rollback)),
+            // Pictures and files
+            ErrorType::UnableToLoadExifMetadata(err) => ErrorResponder::InternalError(Self::create_response(format!("Unable to load Exif metadata: {}", err.to_string()), kind, rollback)),
+            ErrorType::UnableToSaveFile => ErrorResponder::InternalError(Self::create_response("Unable to save file".to_string(), kind, rollback)),
+            ErrorType::UnableToDeleteFile => ErrorResponder::InternalError(Self::create_response("Unable to delete file".to_string(), kind, rollback)),
+            ErrorType::UnableToRetrieveFile => ErrorResponder::InternalError(Self::create_response("Unable to retrieve file".to_string(), kind, rollback)),
         }
     }
     /// Converts to an [`ErrorResponse`] struct

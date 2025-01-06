@@ -1,24 +1,29 @@
-use rocket::{Data, State};
+use std::path::Path;
+use crate::database::database::{DBConn, DBPool};
+use crate::database::picture::Picture;
+use crate::database::user::User;
+use crate::picture_storer::picture_file_storer::PictureFileStorer;
+use crate::picture_storer::picture_storer::PictureStorer;
+use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use rocket::data::ToByteUnit;
 use rocket::form::Form;
 use rocket::fs::{NamedFile, TempFile};
-use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
-use rocket_okapi::{openapi, JsonSchema};
+use rocket::{Data, State};
+use rocket::outcome::IntoOutcome;
 use rocket_okapi::gen::OpenApiGenerator;
 use rocket_okapi::okapi::openapi3;
+use rocket_okapi::{openapi, JsonSchema};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
 use serde::Deserialize;
-use crate::database::database::{DBConn, DBPool};
-use crate::database::user::User;
-use crate::picture_storer::picture_file_storer::PictureFileStorer;
-use crate::picture_storer::picture_storer::{PictureStorer};
+use tokio::io::AsyncReadExt;
 
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct UploadPictureResponse {
     pub(crate) name: String,
+    pub(crate) picture: Picture,
 }
 
 #[derive(FromForm, Debug)]
@@ -38,37 +43,39 @@ impl JsonSchema for UploadPictureData<'_> {
     }
 }
 
-/// Get the account information of the authenticated user.
-/// If the credentials are invalid or match an unconfirmed or banned user, it returns an error from
-/// the User Request Guard.
+/// Upload a picture using multipart form upload
+/// TODO : Implement S3 direct upload
+/// TODO : Implement chunked upload
 #[openapi(tag = "Picture")]
 #[post("/picture", data = "<upload>")]
-pub async fn add_picture(mut upload: Form<UploadPictureData<'_>>, db: &rocket::State<DBPool>, user: User, picture_storer: &State<PictureStorer>) -> Result<Json<UploadPictureResponse>, ErrorResponder> {
+pub async fn add_picture(
+    mut upload: Form<UploadPictureData<'_>>,
+    db: &State<DBPool>,
+    picture_storer: &State<PictureStorer>,
+    user: User,
+) -> Result<Json<UploadPictureResponse>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
-
     let file_name = upload.name.clone();
-    let bytes = &upload.file.open().into_bytes().await.or(ErrorType::UnprocessableEntity.res_err())?;
+    let path = upload.file.path().ok_or(ErrorType::UnableToSaveFile.res())?;
+
+    println!("Uploaded picture: {} as temp file to {:?}", file_name, path);
 
     // EXIF data
-    let meta = rexiv2::Metadata::new_from_buffer(bytes)?;
+    let meta = rexiv2::Metadata::new_from_path(path).map_err(|e| ErrorType::UnableToLoadExifMetadata(e).res())?;
 
-    err_transaction(conn, |conn| {
+    let picture = err_transaction(conn, |conn| {
+        let picture = Picture::insert(conn, user.id, file_name, meta)?;
 
-        // Adding the picture to the database
+        // TODO: request to add the picture to its matching groups
 
+        Ok(picture)
+    })?;
 
-        // TODO: add the picture to its matching groups.
+    // Saving the file
+    picture_storer.store_picture(picture.id, path).await?;
 
-        // Saving the file
-        picture_storer.store_picture(0, upload.into_inner()).await.is_err()
-
-        Ok(Json(UploadPictureResponse {
-            name: "test".to_string(),
-        }))
-
-    })
+    Ok(Json(UploadPictureResponse { name: String::from("tets"), picture }))
 }
-
 
 #[openapi(tag = "Picture")]
 #[get("/picture/<picture_id>")]
