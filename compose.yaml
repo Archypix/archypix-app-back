@@ -1,4 +1,3 @@
-version: '3.3'
 services:
   archypix-app-db:
     image: mysql:8.4
@@ -12,7 +11,20 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./db:/var/lib/mysql
+      - ./data/db:/var/lib/mysql
+
+  archypix-app-minio:
+    image: minio/minio:latest
+    container_name: archypix-app-minio
+    environment:
+      MINIO_ROOT_USER: archypix
+      MINIO_ROOT_PASSWORD: 15hm434Yxzmvtm851VjnlslFHjVFqBkrz72tc2EZOM4hfZBp
+    ports:
+      - "9000:9000" # MinIO API
+      - "9001:9001" # MinIO console
+    volumes:
+      - ./data/minio:/data
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
 
   archypix-app-back:
     build: .
@@ -21,6 +33,7 @@ services:
     restart: unless-stopped
     depends_on:
       - archypix-app-db
+      - archypix-app-minio
     ports:
       - "8000:80"
     environment:
