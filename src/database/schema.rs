@@ -218,6 +218,7 @@ table! {
 }
 joinable!(link_share_groups -> groups (group_id));
 allow_tables_to_appear_in_same_query!(link_share_groups, groups);
+allow_tables_to_appear_in_same_query!(link_share_groups, groups_pictures);
 
 table! {
     use diesel::sql_types::*;
@@ -234,6 +235,7 @@ joinable!(shared_groups -> groups (group_id));
 joinable!(shared_groups -> users (user_id));
 //joinable!(shared_groups -> groups (match_conversion_group_id));
 allow_tables_to_appear_in_same_query!(shared_groups, groups);
+allow_tables_to_appear_in_same_query!(shared_groups, groups_pictures);
 allow_tables_to_appear_in_same_query!(shared_groups, users);
 
 table! {

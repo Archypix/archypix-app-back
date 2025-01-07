@@ -78,6 +78,7 @@ dependencies = [
  "async-trait",
  "aws-config",
  "aws-sdk-s3",
+ "aws-smithy-types",
  "bigdecimal",
  "chrono",
  "chrono-tz 0.10.0",

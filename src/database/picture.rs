@@ -1,4 +1,4 @@
-use crate::database::database::DBConn;
+use crate::database::database::{DBConn, DBPool};
 use crate::database::schema::PictureOrientation;
 use crate::database::schema::*;
 use crate::database::user::User;
@@ -6,11 +6,13 @@ use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use bigdecimal::BigDecimal;
 use chrono::{Duration, NaiveDateTime, TimeDelta, Utc};
 use diesel::dsl::insert_into;
-use diesel::update;
+use diesel::{update, BoolExpressionMethods, JoinOnDsl};
 use diesel::{delete, QueryDsl, SelectableHelper};
 use diesel::{select, Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
 use diesel::{ExpressionMethods, OptionalExtension};
 use diesel_derives::Insertable;
+use rocket::futures::StreamExt;
+use rocket::State;
 use rocket_okapi::JsonSchema;
 use serde::Serialize;
 
@@ -48,7 +50,44 @@ pub struct Picture {
 }
 
 impl Picture {
-    pub fn insert(conn: &mut DBConn, user_id: u32, name: String, metadata: rexiv2::Metadata) -> Result<Picture, ErrorResponder> {
+    /// Returns Unauthorized if the user is not the owner of the picture and the picture is not in a group shared with the user
+    pub(crate) fn can_user_access_picture(conn: &mut DBConn, picture_id: u64, user_id: u32) -> Result<bool, ErrorResponder> {
+        let owned_count = pictures::table
+            .filter(pictures::dsl::id.eq(picture_id))
+            .filter(pictures::dsl::owner_id.eq(user_id))
+            .count()
+            .get_result::<i64>(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get picture".to_string(), e).res())?;
+
+        if owned_count > 0{
+            return Ok(true);
+        }
+
+        let shared_count = groups_pictures::table
+            .inner_join(shared_groups::table
+                .on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id))
+            )
+            .filter(groups_pictures::dsl::picture_id.eq(picture_id))
+            .filter(shared_groups::dsl::user_id.eq(user_id))
+            .count()
+            .get_result::<i64>(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get picture".to_string(), e).res())?;
+
+        Ok(shared_count > 0)
+    }
+    pub(crate) fn is_picture_publicly_shared(conn: &mut DBConn, picture_id: u64) -> Result<bool, ErrorResponder> {
+        let shared_count = groups_pictures::table
+            .inner_join(link_share_groups::table
+                .on(link_share_groups::dsl::group_id.eq(groups_pictures::dsl::group_id))
+            )
+            .filter(groups_pictures::dsl::picture_id.eq(picture_id))
+            .count()
+            .get_result::<i64>(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get picture".to_string(), e).res())?;
+
+        Ok(shared_count > 0)
+    }
+    pub fn insert(conn: &mut DBConn, user_id: u32, name: String, metadata: Option<rexiv2::Metadata>) -> Result<Picture, ErrorResponder> {
         let mut picture = Picture::from(metadata);
         picture.owner_id = user_id;
         picture.author_id = user_id;

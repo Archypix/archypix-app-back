@@ -1,5 +1,5 @@
 use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive};
-use chrono::NaiveDateTime;
+use chrono::{Local, NaiveDateTime, Utc};
 use num_rational::Ratio;
 use rexiv2::Metadata;
 use crate::database::picture::Picture;
@@ -51,7 +51,7 @@ impl From<Metadata> for Picture {
             deleted_date: None,
             copied: false,
             creation_date: NaiveDateTime::parse_from_str(creation_date.as_str(), "%Y:%m:%d %H:%M:%S").unwrap_or(NaiveDateTime::default()),
-            edition_date: NaiveDateTime::parse_from_str(edition_date.as_str(), "%Y:%m:%d %H:%M:%S").unwrap_or(NaiveDateTime::default()),
+            edition_date: NaiveDateTime::parse_from_str(edition_date.as_str(), "%Y:%m:%d %H:%M:%S").unwrap_or(Local::now().naive_utc()),
             latitude,
             longitude,
             altitude,
@@ -65,6 +65,41 @@ impl From<Metadata> for Picture {
             exposure_time_den: exposure_time.map(|r| *r.denom() as u32),
             iso_speed: extract_iso(&metadata),
             f_number: rational_to_big_decimal(metadata.get_tag_rational("Exif.Photo.FNumber"), 1),
+        }
+    }
+}
+
+impl From<Option<Metadata>> for Picture {
+    /// Creates a Picture from a rexiv2 Metadata
+    /// The picture id, name, owner_id and author_id are set to 0 or empty String.
+    /// If the metadata is None, the picture is created with default values.
+    fn from(metadata: Option<Metadata>) -> Self {
+        if let Some(metadata) = metadata {
+            return metadata.into();
+        }
+        Picture {
+            id: 0,
+            name: String::default(),
+            comment: String::default(),
+            owner_id: 0,
+            author_id: 0,
+            deleted_date: None,
+            copied: false,
+            creation_date: NaiveDateTime::default(),
+            edition_date: Local::now().naive_utc(),
+            latitude: None,
+            longitude: None,
+            altitude: None,
+            orientation: PictureOrientation::Unspecified,
+            width: 0,
+            height: 0,
+            camera_brand: None,
+            camera_model: None,
+            focal_length: None,
+            exposure_time_num: None,
+            exposure_time_den: None,
+            iso_speed: None,
+            f_number: None,
         }
     }
 }

@@ -1,23 +1,26 @@
-use std::path::Path;
 use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::Picture;
 use crate::database::user::User;
-use crate::picture_storer::picture_file_storer::PictureFileStorer;
-use crate::picture_storer::picture_storer::PictureStorer;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
+use crate::utils::s3::PictureStorer;
+use aws_smithy_types::byte_stream::ByteStream;
 use rocket::data::ToByteUnit;
 use rocket::form::Form;
 use rocket::fs::{NamedFile, TempFile};
+use rocket::outcome::IntoOutcome;
+use rocket::response::Responder;
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
-use rocket::{Data, State};
-use rocket::outcome::IntoOutcome;
+use rocket::{response, Data, Request, Response, State};
 use rocket_okapi::gen::OpenApiGenerator;
 use rocket_okapi::okapi::openapi3;
+use rocket_okapi::okapi::openapi3::Responses;
+use rocket_okapi::response::OpenApiResponderInner;
 use rocket_okapi::{openapi, JsonSchema};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
 use serde::Deserialize;
+use std::path::Path;
 use tokio::io::AsyncReadExt;
 
 #[derive(JsonSchema, Serialize, Debug)]
@@ -44,7 +47,6 @@ impl JsonSchema for UploadPictureData<'_> {
 }
 
 /// Upload a picture using multipart form upload
-/// TODO : Implement S3 direct upload
 /// TODO : Implement chunked upload
 #[openapi(tag = "Picture")]
 #[post("/picture", data = "<upload>")]
@@ -58,13 +60,12 @@ pub async fn add_picture(
     let file_name = upload.name.clone();
     let path = upload.file.path().ok_or(ErrorType::UnableToSaveFile.res())?;
 
-    println!("Uploaded picture: {} as temp file to {:?}", file_name, path);
-
     // EXIF data
-    let meta = rexiv2::Metadata::new_from_path(path).map_err(|e| ErrorType::UnableToLoadExifMetadata(e).res())?;
+    let meta = rexiv2::Metadata::new_from_path(path).ok();
+
 
     let picture = err_transaction(conn, |conn| {
-        let picture = Picture::insert(conn, user.id, file_name, meta)?;
+        let picture = Picture::insert(conn, user.id, file_name.clone(), meta)?;
 
         // TODO: request to add the picture to its matching groups
 
@@ -72,15 +73,56 @@ pub async fn add_picture(
     })?;
 
     // Saving the file
-    picture_storer.store_picture(picture.id, path).await?;
+    picture_storer.store_picture_from_file(picture.id, &path).await?;
 
-    Ok(Json(UploadPictureResponse { name: String::from("tets"), picture }))
+    Ok(Json(UploadPictureResponse {
+        name: file_name,
+        picture,
+    }))
 }
 
+struct PictureStream {
+    picture_id: u64,
+    picture_stream: ByteStream,
+}
+
+impl<'a> Responder<'a, 'a> for PictureStream {
+    fn respond_to(self, _: &Request) -> response::Result<'a> {
+        Response::build()
+            .header(rocket::http::ContentType::JPEG)
+            .streamed_body(self.picture_stream.into_async_read())
+            .ok()
+    }
+}
+impl OpenApiResponderInner for PictureStream {
+    fn responses(_: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
+        Ok(Responses::default())
+    }
+}
+
+/// Get a picture by its id
+/// If the user is logged in, the picture is only accessible if  owned by the user or in a shared group with the user,
+/// If the user is not logged in, the picture is only accessible if it is in a publicly shared group.
+/// Otherwise, Unauthorized is returned
 #[openapi(tag = "Picture")]
 #[get("/picture/<picture_id>")]
-pub async fn get_picture(picture_id: u64, user: Option<User>, picture_storer: &State<PictureStorer>) -> Result<NamedFile, ErrorResponder> {
-    // TODO : check if the user has access to the picture
+pub async fn get_picture(
+    db: &State<DBPool>,
+    picture_id: u64,
+    user: Option<User>,
+    picture_storer: &State<PictureStorer>,
+) -> Result<PictureStream, ErrorResponder> {
+    let conn: &mut DBConn = &mut db.get().unwrap();
 
-    picture_storer.get_picture(picture_id).await.or(ErrorType::UnprocessableEntity.res_err())
+    let access_allowed = if let Some(user) = user {
+        Picture::can_user_access_picture(conn, picture_id, user.id)?
+    } else {
+        Picture::is_picture_publicly_shared(conn, picture_id)?
+    };
+    if !access_allowed {
+        return Err(ErrorType::Unauthorized.res());
+    }
+
+    let picture_stream = picture_storer.get_picture(picture_id).await?;
+    Ok(PictureStream { picture_id, picture_stream })
 }
