@@ -92,6 +92,7 @@ dependencies = [
  "lazy_static",
  "lettre",
  "libunftp",
+ "magick_rust",
  "num-rational",
  "pwhash",
  "rand",
@@ -2395,6 +2396,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
 dependencies = [
  "hashbrown 0.15.2",
+]
+
+[[package]]
+name = "magick_rust"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29f862f489ba66357a730356f1d48abdb2c5028707b6c17dee7842359bc6372c"
+dependencies = [
+ "bindgen",
+ "libc",
+ "pkg-config",
 ]
 
 [[package]]

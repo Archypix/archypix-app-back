@@ -2,7 +2,7 @@ use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::Picture;
 use crate::database::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
-use crate::utils::s3::PictureStorer;
+use crate::utils::s3::{BucketType, PictureStorer};
 use aws_smithy_types::byte_stream::ByteStream;
 use rocket::data::ToByteUnit;
 use rocket::form::Form;
@@ -22,6 +22,7 @@ use schemars::schema::{Schema, SchemaObject};
 use serde::Deserialize;
 use std::path::Path;
 use tokio::io::AsyncReadExt;
+use crate::utils::thumbnail::PictureThumbnail;
 
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct UploadPictureResponse {
@@ -58,12 +59,13 @@ pub async fn add_picture(
 ) -> Result<Json<UploadPictureResponse>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
     let file_name = upload.name.clone();
-    let path = upload.file.path().ok_or(ErrorType::UnableToSaveFile.res())?;
+    upload.file.persist_to("./picture-temp").await.unwrap();
+    let path = upload.file.path().unwrap();
 
-    // EXIF data
+    // EXIF metadata
     let meta = rexiv2::Metadata::new_from_path(path).ok();
 
-
+    // Database operations
     let picture = err_transaction(conn, |conn| {
         let picture = Picture::insert(conn, user.id, file_name.clone(), meta)?;
 
@@ -73,7 +75,10 @@ pub async fn add_picture(
     })?;
 
     // Saving the file
-    picture_storer.store_picture_from_file(picture.id, &path).await?;
+    picture_storer.store_picture_from_file(PictureThumbnail::Original, picture.id, &path).await?;
+
+    // Generating thumbnails
+    // TODO: Call the thumbnail generator function and then store the thumbnails in the S3 bucket
 
     Ok(Json(UploadPictureResponse {
         name: file_name,
@@ -123,6 +128,6 @@ pub async fn get_picture(
         return Err(ErrorType::Unauthorized.res());
     }
 
-    let picture_stream = picture_storer.get_picture(picture_id).await?;
+    let picture_stream = picture_storer.get_picture(PictureThumbnail::Medium, picture_id).await?;
     Ok(PictureStream { picture_id, picture_stream })
 }

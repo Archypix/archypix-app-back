@@ -7,11 +7,11 @@ use aws_smithy_types::byte_stream::ByteStream;
 use std::env;
 use std::path::Path;
 use std::time::Duration;
-use rocket::{response, Request};
-use rocket::response::Responder;
+use strum::IntoEnumIterator;
+use crate::utils::thumbnail::PictureThumbnail;
 
-const BUCKET_PICTURES: &str = "archypix-pictures";
-const BUCKETS: [&str; 2] = [BUCKET_PICTURES, "archypix-thumbnails"];
+/// Should match the thumbnails type in utils::thumbnail::PictureThumbnail
+const BUCKETS: [&str; 4] = ["archypix-pictures", "archypix-thumbnails-small", "archypix-thumbnails-medium", "archypix-thumbnails-large"];
 
 pub struct PictureStorer {
     client: Client,
@@ -59,33 +59,33 @@ impl PictureStorer {
         }
     }
 
-    pub async fn store_picture_from_file(&self, id: u64, path: &Path) -> Result<(), ErrorResponder> {
+    pub async fn store_picture_from_file(&self, picture_thumbnail: PictureThumbnail, id: u64, path: &Path) -> Result<(), ErrorResponder> {
         self.client
             .put_object()
-            .bucket(BUCKET_PICTURES)
+            .bucket(BUCKETS[picture_thumbnail as usize])
             .key(id.to_string())
-            .body(ByteStream::from_path(path).await.map_err(|e| ErrorType::UnableToSaveFile.res())?)
+            .body(ByteStream::from_path(path).await.map_err(|e| ErrorType::UnableToStoreObject.res())?)
             .send()
             .await
             .map(|_| ())
-            .map_err(|e| ErrorType::UnableToSaveFile.res_rollback())
+            .map_err(|e| ErrorType::UnableToStoreObject.res_rollback())
     }
 
-    pub async fn get_picture(&self, id: u64) -> Result<ByteStream, ErrorResponder> {
+    pub async fn get_picture(&self, picture_thumbnail: PictureThumbnail, id: u64) -> Result<ByteStream, ErrorResponder> {
         self.client
             .get_object()
-            .bucket(BUCKET_PICTURES)
+            .bucket(BUCKETS[picture_thumbnail as usize])
             .key(id.to_string())
             .send()
             .await
             .map(|output| output.body)
-            .map_err(|e| ErrorType::UnableToRetrieveFile.res_rollback())
+            .map_err(|e| ErrorType::UnableToRetrieveObject.res_rollback())
     }
 
-    pub async fn get_picture_as_url(&self, id: u64) -> Result<String, ErrorResponder> {
+    pub async fn get_picture_as_url(&self, picture_thumbnail: PictureThumbnail, id: u64) -> Result<String, ErrorResponder> {
         self.client
             .get_object()
-            .bucket(BUCKET_PICTURES)
+            .bucket(BUCKETS[picture_thumbnail as usize])
             .key(id.to_string())
             .presigned(
                 PresigningConfig::builder()
@@ -95,6 +95,6 @@ impl PictureStorer {
             )
             .await
             .map(|output| String::from(output.uri()))
-            .map_err(|e| ErrorType::UnableToRetrieveFile.res_rollback())
+            .map_err(|e| ErrorType::UnableToRetrieveObject.res_rollback())
     }
 }

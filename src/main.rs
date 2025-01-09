@@ -62,16 +62,12 @@ mod grouping {
 mod mailing {
     pub mod mailer;
 }
-mod picture_storer {
-    pub mod picture_file_storer;
-    pub mod picture_s3_storer;
-    pub mod picture_storer;
-}
 mod utils {
     pub mod auth;
     pub mod errors_catcher;
     pub mod exif;
     pub mod s3;
+    pub mod thumbnail;
     pub mod utils;
     pub mod validation;
 }

@@ -95,9 +95,8 @@ pub enum ErrorType {
     DatabaseError(String, Error),
     // Pictures and files
     UnableToLoadExifMetadata(Rexiv2Error),
-    UnableToSaveFile,
-    UnableToDeleteFile,
-    UnableToRetrieveFile,
+    S3Error(String),
+    UnableToCreateThumbnail(String),
 }
 
 impl ErrorType {
@@ -152,9 +151,8 @@ impl ErrorType {
             ErrorType::DatabaseError(msg, err) => ErrorResponder::InternalError(Self::create_response(format!("Database error: {} - {}", msg, err), kind, rollback)),
             // Pictures and files
             ErrorType::UnableToLoadExifMetadata(err) => ErrorResponder::InternalError(Self::create_response(format!("Unable to load Exif metadata: {}", err.to_string()), kind, rollback)),
-            ErrorType::UnableToSaveFile => ErrorResponder::InternalError(Self::create_response("Unable to save file".to_string(), kind, rollback)),
-            ErrorType::UnableToDeleteFile => ErrorResponder::InternalError(Self::create_response("Unable to delete file".to_string(), kind, rollback)),
-            ErrorType::UnableToRetrieveFile => ErrorResponder::InternalError(Self::create_response("Unable to retrieve file".to_string(), kind, rollback)),
+            ErrorType::S3Error(msg) => ErrorResponder::InternalError(Self::create_response(format!("S3 error: {}", msg), kind, rollback)),
+            ErrorType::UnableToCreateThumbnail(msg) => ErrorResponder::InternalError(Self::create_response(format!("Unable to create thumbnail: {}", msg), kind, rollback)),
         }
     }
     /// Converts to an [`ErrorResponse`] struct
