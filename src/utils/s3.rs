@@ -64,11 +64,11 @@ impl PictureStorer {
             .put_object()
             .bucket(BUCKETS[picture_thumbnail as usize])
             .key(id.to_string())
-            .body(ByteStream::from_path(path).await.map_err(|e| ErrorType::UnableToStoreObject.res())?)
+            .body(ByteStream::from_path(path).await.map_err(|e| ErrorType::S3Error(String::from("Unable to read file")).res())?)
             .send()
             .await
             .map(|_| ())
-            .map_err(|e| ErrorType::UnableToStoreObject.res_rollback())
+            .map_err(|e| ErrorType::S3Error(String::from("Unable to store object")).res_rollback())
     }
 
     pub async fn get_picture(&self, picture_thumbnail: PictureThumbnail, id: u64) -> Result<ByteStream, ErrorResponder> {
@@ -79,7 +79,7 @@ impl PictureStorer {
             .send()
             .await
             .map(|output| output.body)
-            .map_err(|e| ErrorType::UnableToRetrieveObject.res_rollback())
+            .map_err(|e| ErrorType::S3Error(String::from("Unable to retrieve object")).res_rollback())
     }
 
     pub async fn get_picture_as_url(&self, picture_thumbnail: PictureThumbnail, id: u64) -> Result<String, ErrorResponder> {
@@ -95,6 +95,6 @@ impl PictureStorer {
             )
             .await
             .map(|output| String::from(output.uri()))
-            .map_err(|e| ErrorType::UnableToRetrieveObject.res_rollback())
+            .map_err(|e| ErrorType::S3Error(String::from("Unable to retrieve object")).res_rollback())
     }
 }

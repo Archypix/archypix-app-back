@@ -1,8 +1,10 @@
+use std::env::temp_dir;
 use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::Picture;
 use crate::database::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
-use crate::utils::s3::{BucketType, PictureStorer};
+use crate::utils::s3::PictureStorer;
+use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, PictureThumbnailIter};
 use aws_smithy_types::byte_stream::ByteStream;
 use rocket::data::ToByteUnit;
 use rocket::form::Form;
@@ -21,8 +23,11 @@ use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
 use serde::Deserialize;
 use std::path::Path;
+use rand::random;
+use strum::IntoEnumIterator;
 use tokio::io::AsyncReadExt;
-use crate::utils::thumbnail::PictureThumbnail;
+use tokio::task;
+use totp_rs::qrcodegen_image::image::imageops::thumbnail;
 
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct UploadPictureResponse {
@@ -59,31 +64,57 @@ pub async fn add_picture(
 ) -> Result<Json<UploadPictureResponse>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
     let file_name = upload.name.clone();
-    upload.file.persist_to("./picture-temp").await.unwrap();
-    let path = upload.file.path().unwrap();
 
-    // EXIF metadata
-    let meta = rexiv2::Metadata::new_from_path(path).ok();
+    let file_name_ascii = file_name.chars().filter(|c| c.is_ascii()).collect::<String>();
+    let temp_dir = Path::new("./picture-temp");
+    let temp_file_name = format!("{}-{}", random::<u16>(), file_name_ascii);
 
-    // Database operations
-    let picture = err_transaction(conn, |conn| {
-        let picture = Picture::insert(conn, user.id, file_name.clone(), meta)?;
+    let temp_file_name_clone = temp_file_name.clone();
+    let res = {
+        // Saving the file
+        upload.file.persist_to(temp_dir.join("original").join(temp_file_name_clone)).await.unwrap();
+        let path = upload.file.path().unwrap();
 
-        // TODO: request to add the picture to its matching groups
+        // EXIF metadata
+        let meta = rexiv2::Metadata::new_from_path(path).ok();
 
-        Ok(picture)
-    })?;
+        // Database operations
+        let picture = err_transaction(conn, |conn| {
+            let picture = Picture::insert(conn, user.id, file_name.clone(), meta)?;
 
-    // Saving the file
-    picture_storer.store_picture_from_file(PictureThumbnail::Original, picture.id, &path).await?;
+            // TODO: request to add the picture to its matching groups
 
-    // Generating thumbnails
-    // TODO: Call the thumbnail generator function and then store the thumbnails in the S3 bucket
+            // Saving the file
+            task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    picture_storer
+                        .store_picture_from_file(PictureThumbnail::Original, picture.id, &path)
+                        .await
+                })
+            });
 
-    Ok(Json(UploadPictureResponse {
-        name: file_name,
-        picture,
-    }))
+            Ok(picture)
+        })?;
+
+        // Generating thumbnails
+        for thumbnail_type in PictureThumbnail::iter() {
+            if thumbnail_type == PictureThumbnail::Original {
+                continue;
+            }
+            picture_storer
+                .store_picture_from_file(thumbnail_type, picture.id, &generate_thumbnail(thumbnail_type, &path, &temp_dir).unwrap())
+                .await?
+        }
+
+        Ok(Json(UploadPictureResponse { name: file_name, picture }))
+    };
+
+    if res.is_err() {
+        for thumbnail_type in PictureThumbnail::iter() {
+            let _ = std::fs::remove_file(temp_dir.join(thumbnail_type.to_string().to_lowercase()).join(temp_file_name.clone()));
+        }
+    }
+    res
 }
 
 struct PictureStream {
@@ -110,9 +141,10 @@ impl OpenApiResponderInner for PictureStream {
 /// If the user is not logged in, the picture is only accessible if it is in a publicly shared group.
 /// Otherwise, Unauthorized is returned
 #[openapi(tag = "Picture")]
-#[get("/picture/<picture_id>")]
+#[get("/picture/<format>/<picture_id>")]
 pub async fn get_picture(
     db: &State<DBPool>,
+    format: PictureThumbnail,
     picture_id: u64,
     user: Option<User>,
     picture_storer: &State<PictureStorer>,
@@ -128,6 +160,6 @@ pub async fn get_picture(
         return Err(ErrorType::Unauthorized.res());
     }
 
-    let picture_stream = picture_storer.get_picture(PictureThumbnail::Medium, picture_id).await?;
+    let picture_stream = picture_storer.get_picture(format, picture_id).await?;
     Ok(PictureStream { picture_id, picture_stream })
 }

@@ -1,41 +1,65 @@
-use crate::utils::errors_catcher::{ErrorResponder, ErrorResponse, ErrorType};
+use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use magick_rust::{magick_wand_genesis, MagickWand};
-use rand::{random, Rng};
 use std::path::{Path, PathBuf};
-use strum_macros::EnumIter;
+use rocket::request::FromParam;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter};
 
-#[derive(Debug, PartialEq, Clone, Copy, EnumIter)]
+#[derive(Display, Debug, PartialEq, Clone, Copy, EnumIter, Deserialize, Serialize, JsonSchema)]
 pub enum PictureThumbnail {
     Original = 0,
     Small = 1,
     Medium = 2,
     Large = 3,
 }
+impl FromParam<'_> for PictureThumbnail {
+    type Error = ErrorResponder;
+    fn from_param(param: &str) -> Result<Self, Self::Error> {
+        match param {
+            "original" => Ok(PictureThumbnail::Original),
+            "small" => Ok(PictureThumbnail::Small),
+            "medium" => Ok(PictureThumbnail::Medium),
+            "large" => Ok(PictureThumbnail::Large),
+            _ => ErrorType::NotFound(String::from("Invalid thumbnail type")).res_err(),
+        }
+    }
+}
 
-pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path, dest_dir: &Path) -> Result<PathBuf, ErrorResponder> {
+pub fn create_temp_directories() {
+    for thumbnail_type in PictureThumbnail::iter() {
+        let dest_dir_path = format!("./picture-temp/{}", thumbnail_type.to_string().to_lowercase());
+        let dest_dir = Path::new(dest_dir_path.as_str());
+        if !dest_dir.exists() {
+            std::fs::create_dir_all(dest_dir).expect("Unable to create temp directory");
+        }
+    }
+}
+/// Generate a thumbnail from a source file and stores it in temp_dir/<thumbnail_type>/original_name.webp
+
+pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path, temp_dir: &Path) -> Result<PathBuf, ErrorResponder> {
     // Initialize the Magick Wand environment
     magick_wand_genesis();
 
     let mut wand = MagickWand::new();
-    if let Err(e) = wand.read_image(source_file.to_str().expect("Source file path is not valid UTF-8")) {
+    if let Err(e) = wand.read_image(source_file.to_str().unwrap()) {
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to read image")).res_err();
     }
 
     let size = get_thumbnail_size(thumbnail_type);
-    if let Err(e) = wand.fit(size, size) {
-        return ErrorType::UnableToCreateThumbnail(String::from("Unable to resize image")).res_err();
-    }
+    wand.fit(size, size);
 
     if let Err(e) = wand.set_image_format("webp") {
+        println!("{:?}", e);
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to set image format")).res_err();
     }
 
-    let random_name: u64 = random();
-    let dest_file_name = dest_dir.join(format!("{}.webp", random_name));
-    let dest_file = dest_dir.join(dest_file_name.to_str().expect("Destination file path is not valid UTF-8"));
-    let dest_file_path = dest_file.to_str().expect("Destination file path is not valid UTF-8");
+    let dest_file = temp_dir.join(source_file.file_name().unwrap().to_str().unwrap());
+    let dest_file_path = dest_file.to_str().unwrap();
 
     if let Err(e) = wand.write_image(dest_file_path) {
+        println!("{:?}", e);
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to write image")).res_err();
     }
 
@@ -48,5 +72,6 @@ fn get_thumbnail_size(thumbnail_type: PictureThumbnail) -> (usize) {
         PictureThumbnail::Small => Some(100),
         PictureThumbnail::Medium => Some(500),
         PictureThumbnail::Large => Some(1000),
-    }.expect("Invalid thumbnail type")
+    }
+    .expect("Invalid thumbnail type")
 }

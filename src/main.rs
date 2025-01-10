@@ -24,6 +24,7 @@ use std::env;
 use rocket::data::{ByteUnit, Limits, ToByteUnit};
 use user_agent_parser::UserAgentParser;
 use crate::utils::s3::PictureStorer;
+use crate::utils::thumbnail::create_temp_directories;
 
 mod api {
     pub mod picture;
@@ -87,6 +88,9 @@ async fn rocket() -> _ {
 
     // Load S3 Client
     let picture_storer = PictureStorer::new().await;
+
+    // Create pictures temp directories
+    create_temp_directories();
 
     rocket::build()
         .attach(cors_options())
