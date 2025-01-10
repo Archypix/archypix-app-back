@@ -1,11 +1,11 @@
-use std::env::temp_dir;
 use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::Picture;
 use crate::database::user::User;
-use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
+use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorResponse, ErrorType};
 use crate::utils::s3::PictureStorer;
-use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, PictureThumbnailIter};
+use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, PictureThumbnailIter, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};
 use aws_smithy_types::byte_stream::ByteStream;
+use rand::random;
 use rocket::data::ToByteUnit;
 use rocket::form::Form;
 use rocket::fs::{NamedFile, TempFile};
@@ -22,8 +22,8 @@ use rocket_okapi::{openapi, JsonSchema};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
 use serde::Deserialize;
+use std::env::temp_dir;
 use std::path::Path;
-use rand::random;
 use strum::IntoEnumIterator;
 use tokio::io::AsyncReadExt;
 use tokio::task;
@@ -33,6 +33,7 @@ use totp_rs::qrcodegen_image::image::imageops::thumbnail;
 pub struct UploadPictureResponse {
     pub(crate) name: String,
     pub(crate) picture: Picture,
+    pub(crate) thumbnail_error: Option<ErrorResponse>,
 }
 
 #[derive(FromForm, Debug)]
@@ -66,13 +67,15 @@ pub async fn add_picture(
     let file_name = upload.name.clone();
 
     let file_name_ascii = file_name.chars().filter(|c| c.is_ascii()).collect::<String>();
-    let temp_dir = Path::new("./picture-temp");
     let temp_file_name = format!("{}-{}", random::<u16>(), file_name_ascii);
 
     let temp_file_name_clone = temp_file_name.clone();
     let res = {
         // Saving the file
-        upload.file.persist_to(temp_dir.join("original").join(temp_file_name_clone)).await.unwrap();
+        if let Err(e) = upload.file.persist_to(Path::new(ORIGINAL_TEMP_DIR).join(temp_file_name.clone())).await {
+            println!("{:?}", e);
+            return ErrorType::InternalError(format!("Unable to save file to {}", ORIGINAL_TEMP_DIR)).res_err();
+        }
         let path = upload.file.path().unwrap();
 
         // EXIF metadata
@@ -91,29 +94,39 @@ pub async fn add_picture(
                         .store_picture_from_file(PictureThumbnail::Original, picture.id, &path)
                         .await
                 })
-            });
+            })?;
 
             Ok(picture)
         })?;
 
         // Generating thumbnails
+        let mut thumbnail_error = None;
         for thumbnail_type in PictureThumbnail::iter() {
             if thumbnail_type == PictureThumbnail::Original {
                 continue;
             }
-            picture_storer
-                .store_picture_from_file(thumbnail_type, picture.id, &generate_thumbnail(thumbnail_type, &path, &temp_dir).unwrap())
-                .await?
+            let thumbnail_path = generate_thumbnail(thumbnail_type, &path);
+
+            let error = if let Ok(thumbnail_path) = thumbnail_path {
+                picture_storer.store_picture_from_file(thumbnail_type, picture.id, &thumbnail_path).await
+            } else {
+                thumbnail_path.map(|_| ())
+            };
+            if let Err(e) = error {
+                thumbnail_error = Some(ErrorResponse::from(e));
+            }
         }
 
-        Ok(Json(UploadPictureResponse { name: file_name, picture }))
+        Ok(Json(UploadPictureResponse {
+            name: file_name,
+            picture,
+            thumbnail_error,
+        }))
     };
 
-    if res.is_err() {
-        for thumbnail_type in PictureThumbnail::iter() {
-            let _ = std::fs::remove_file(temp_dir.join(thumbnail_type.to_string().to_lowercase()).join(temp_file_name.clone()));
-        }
-    }
+    // Cleaning up
+    let _ = std::fs::remove_file(Path::new(ORIGINAL_TEMP_DIR).join(temp_file_name.clone()));
+    let _ = std::fs::remove_file(Path::new(THUMBS_TEMP_DIR).join(temp_file_name));
     res
 }
 

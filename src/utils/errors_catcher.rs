@@ -61,6 +61,17 @@ pub struct ErrorResponse {
     // Rollback the diesel transaction if true
     pub rollback: bool,
 }
+impl From<ErrorResponder> for ErrorResponse {
+    fn from(value: ErrorResponder) -> Self {
+        match value {
+            ErrorResponder::BadRequest(json) => json.into_inner(),
+            ErrorResponder::Unauthorized(json) => json.into_inner(),
+            ErrorResponder::NotFound(json) => json.into_inner(),
+            ErrorResponder::UnprocessableEntity(json) => json.into_inner(),
+            ErrorResponder::InternalError(json) => json.into_inner(),
+        }
+    }
+}
 
 /// All possible error types that can be converted to [`ErrorResponse`] and then [`ErrorResponder`]
 #[derive(EnumKind, Debug, Display)]

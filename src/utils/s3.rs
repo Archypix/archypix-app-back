@@ -64,7 +64,7 @@ impl PictureStorer {
             .put_object()
             .bucket(BUCKETS[picture_thumbnail as usize])
             .key(id.to_string())
-            .body(ByteStream::from_path(path).await.map_err(|e| ErrorType::S3Error(String::from("Unable to read file")).res())?)
+            .body(ByteStream::from_path(path).await.map_err(|e| ErrorType::S3Error(String::from("Unable to read file")).res_rollback())?)
             .send()
             .await
             .map(|_| ())

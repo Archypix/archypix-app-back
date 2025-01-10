@@ -26,24 +26,26 @@ impl FromParam<'_> for PictureThumbnail {
         }
     }
 }
+pub const ORIGINAL_TEMP_DIR: &str = "./picture-temp/original";
+pub const THUMBS_TEMP_DIR: &str = "./picture-temp/thumbs";
 
 pub fn create_temp_directories() {
-    for thumbnail_type in PictureThumbnail::iter() {
-        let dest_dir_path = format!("./picture-temp/{}", thumbnail_type.to_string().to_lowercase());
-        let dest_dir = Path::new(dest_dir_path.as_str());
-        if !dest_dir.exists() {
-            std::fs::create_dir_all(dest_dir).expect("Unable to create temp directory");
-        }
+    if !Path::new(ORIGINAL_TEMP_DIR).exists() {
+        std::fs::create_dir_all(ORIGINAL_TEMP_DIR).expect("Unable to create temp directory");
+    }
+    if !Path::new(THUMBS_TEMP_DIR).exists() {
+        std::fs::create_dir_all(THUMBS_TEMP_DIR).expect("Unable to create temp directory");
     }
 }
 /// Generate a thumbnail from a source file and stores it in temp_dir/<thumbnail_type>/original_name.webp
 
-pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path, temp_dir: &Path) -> Result<PathBuf, ErrorResponder> {
+pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) -> Result<PathBuf, ErrorResponder> {
     // Initialize the Magick Wand environment
     magick_wand_genesis();
 
     let mut wand = MagickWand::new();
     if let Err(e) = wand.read_image(source_file.to_str().unwrap()) {
+        println!("{:?}", e);
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to read image")).res_err();
     }
 
@@ -55,7 +57,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path, 
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to set image format")).res_err();
     }
 
-    let dest_file = temp_dir.join(source_file.file_name().unwrap().to_str().unwrap());
+    let dest_file = Path::new(THUMBS_TEMP_DIR).join(source_file.file_name().unwrap().to_str().unwrap());
     let dest_file_path = dest_file.to_str().unwrap();
 
     if let Err(e) = wand.write_image(dest_file_path) {
