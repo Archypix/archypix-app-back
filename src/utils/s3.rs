@@ -1,4 +1,5 @@
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use crate::utils::thumbnail::PictureThumbnail;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::config::Credentials;
 use aws_sdk_s3::presigning::PresigningConfig;
@@ -8,10 +9,14 @@ use std::env;
 use std::path::Path;
 use std::time::Duration;
 use strum::IntoEnumIterator;
-use crate::utils::thumbnail::PictureThumbnail;
 
 /// Should match the thumbnails type in utils::thumbnail::PictureThumbnail
-const BUCKETS: [&str; 4] = ["archypix-pictures", "archypix-thumbnails-small", "archypix-thumbnails-medium", "archypix-thumbnails-large"];
+const BUCKETS: [&str; 4] = [
+    "archypix-pictures",
+    "archypix-thumbnails-small",
+    "archypix-thumbnails-medium",
+    "archypix-thumbnails-large",
+];
 
 pub struct PictureStorer {
     client: Client,
@@ -49,7 +54,7 @@ impl PictureStorer {
             .map(|bucket| bucket.name().unwrap_or_default().to_string())
             .collect();
 
-        for (bucket_name) in BUCKETS.iter() {
+        for bucket_name in BUCKETS.iter() {
             if !existing_bucket_names.contains(&bucket_name.to_string()) {
                 let create_bucket_output = self.client.create_bucket().bucket(bucket_name.to_string()).send().await.unwrap();
                 println!("Created bucket: {:?}", create_bucket_output);
@@ -64,7 +69,11 @@ impl PictureStorer {
             .put_object()
             .bucket(BUCKETS[picture_thumbnail as usize])
             .key(id.to_string())
-            .body(ByteStream::from_path(path).await.map_err(|e| ErrorType::S3Error(String::from("Unable to read file")).res_rollback())?)
+            .body(
+                ByteStream::from_path(path)
+                    .await
+                    .map_err(|e| ErrorType::S3Error(String::from("Unable to read file")).res_rollback())?,
+            )
             .send()
             .await
             .map(|_| ())

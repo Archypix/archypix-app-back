@@ -1,18 +1,17 @@
-use crate::database::database::{DBConn, DBPool};
+use crate::database::database::DBConn;
 use crate::database::schema::PictureOrientation;
 use crate::database::schema::*;
 use crate::database::user::User;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use bigdecimal::BigDecimal;
-use chrono::{Duration, NaiveDateTime, TimeDelta, Utc};
+use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
-use diesel::{update, BoolExpressionMethods, JoinOnDsl};
-use diesel::{delete, QueryDsl, SelectableHelper};
+use diesel::ExpressionMethods;
+use diesel::JoinOnDsl;
+use diesel::QueryDsl;
 use diesel::{select, Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
-use diesel::{ExpressionMethods, OptionalExtension};
 use diesel_derives::Insertable;
 use rocket::futures::StreamExt;
-use rocket::State;
 use rocket_okapi::JsonSchema;
 use serde::Serialize;
 
@@ -59,14 +58,12 @@ impl Picture {
             .get_result::<i64>(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to get picture".to_string(), e).res())?;
 
-        if owned_count > 0{
+        if owned_count > 0 {
             return Ok(true);
         }
 
         let shared_count = groups_pictures::table
-            .inner_join(shared_groups::table
-                .on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id))
-            )
+            .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
             .filter(groups_pictures::dsl::picture_id.eq(picture_id))
             .filter(shared_groups::dsl::user_id.eq(user_id))
             .count()
@@ -77,9 +74,7 @@ impl Picture {
     }
     pub(crate) fn is_picture_publicly_shared(conn: &mut DBConn, picture_id: u64) -> Result<bool, ErrorResponder> {
         let shared_count = groups_pictures::table
-            .inner_join(link_share_groups::table
-                .on(link_share_groups::dsl::group_id.eq(groups_pictures::dsl::group_id))
-            )
+            .inner_join(link_share_groups::table.on(link_share_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
             .filter(groups_pictures::dsl::picture_id.eq(picture_id))
             .count()
             .get_result::<i64>(conn)

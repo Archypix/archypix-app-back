@@ -1,8 +1,6 @@
-use diesel::Connection;
 use rocket::serde::{json::Json, Deserialize};
 use rocket_okapi::{openapi, JsonSchema};
 use serde::Serialize;
-use std::env;
 use validator::Validate;
 
 use crate::database::auth_token::Confirmation;
@@ -11,7 +9,7 @@ use crate::database::schema::ConfirmationAction;
 use crate::database::user::User;
 use crate::mailing::mailer::send_rendered_email;
 use crate::utils::auth::DeviceInfo;
-use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
+use crate::utils::errors_catcher::{err_transaction, ErrorResponder};
 use crate::utils::utils::{get_frontend_host, left_pad};
 use crate::utils::validation::validate_input;
 use crate::utils::validation::validate_password;
@@ -48,7 +46,8 @@ pub fn auth_signup(data: Json<SignupData>, db: &rocket::State<DBPool>, device_in
         let uid = User::create_user(conn, &data.name, &data.email, &data.password)?;
 
         // Inserting confirmation
-        let (confirm_token, confirm_code_token, confirm_code) = Confirmation::insert_confirmation(conn, uid, ConfirmationAction::Signup, &device_info, &data.redirect_url, 0)?;
+        let (confirm_token, confirm_code_token, confirm_code) =
+            Confirmation::insert_confirmation(conn, uid, ConfirmationAction::Signup, &device_info, &data.redirect_url, 0)?;
         let confirm_code_str = left_pad(&confirm_code.to_string(), '0', 4);
 
         // Sending email

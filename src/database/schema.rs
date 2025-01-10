@@ -1,4 +1,4 @@
-use diesel::sql_types::{Binary, Json, Nullable, SqlType, VarChar};
+use diesel::sql_types::{Binary, Nullable, SqlType, VarChar};
 use diesel::{allow_tables_to_appear_in_same_query, joinable, table};
 use diesel_derives::define_sql_function;
 use rocket_okapi::JsonSchema;

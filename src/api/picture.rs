@@ -3,31 +3,24 @@ use crate::database::picture::Picture;
 use crate::database::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorResponse, ErrorType};
 use crate::utils::s3::PictureStorer;
-use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, PictureThumbnailIter, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};
+use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};
 use aws_smithy_types::byte_stream::ByteStream;
 use rand::random;
-use rocket::data::ToByteUnit;
 use rocket::form::Form;
-use rocket::fs::{NamedFile, TempFile};
-use rocket::outcome::IntoOutcome;
+use rocket::fs::TempFile;
 use rocket::response::Responder;
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
-use rocket::{response, Data, Request, Response, State};
+use rocket::{response, Request, Response, State};
 use rocket_okapi::gen::OpenApiGenerator;
-use rocket_okapi::okapi::openapi3;
 use rocket_okapi::okapi::openapi3::Responses;
 use rocket_okapi::response::OpenApiResponderInner;
 use rocket_okapi::{openapi, JsonSchema};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
-use serde::Deserialize;
-use std::env::temp_dir;
 use std::path::Path;
 use strum::IntoEnumIterator;
-use tokio::io::AsyncReadExt;
 use tokio::task;
-use totp_rs::qrcodegen_image::image::imageops::thumbnail;
 
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct UploadPictureResponse {

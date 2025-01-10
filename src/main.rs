@@ -11,6 +11,8 @@ use crate::api::auth::status::{auth_status, okapi_add_operation_for_auth_status_
 use crate::api::picture::{add_picture, get_picture, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_};
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
+use crate::utils::s3::PictureStorer;
+use crate::utils::thumbnail::create_temp_directories;
 use crate::utils::utils::{get_backend_host, get_frontend_host};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
@@ -21,10 +23,7 @@ use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDoc
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use std::env;
-use rocket::data::{ByteUnit, Limits, ToByteUnit};
 use user_agent_parser::UserAgentParser;
-use crate::utils::s3::PictureStorer;
-use crate::utils::thumbnail::create_temp_directories;
 
 mod api {
     pub mod picture;

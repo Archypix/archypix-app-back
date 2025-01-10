@@ -1,24 +1,16 @@
-use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive};
-use chrono::{Local, NaiveDateTime, Utc};
-use num_rational::Ratio;
-use rexiv2::Metadata;
 use crate::database::picture::Picture;
 use crate::database::schema::PictureOrientation;
+use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive};
+use chrono::{Local, NaiveDateTime};
+use num_rational::Ratio;
+use rexiv2::Metadata;
 
 impl From<Metadata> for Picture {
     /// Creates a Picture from a rexiv2 Metadata
     /// The picture id, name, owner_id and author_id are set to 0 or empty String.
     fn from(metadata: Metadata) -> Self {
-
-        let creation_tags = [
-            "Exif.Image.DateTime",
-            "Exif.Image.DateTimeOriginal",
-            "Exif.Image.DateTimeDigitized",
-        ];
-        let edition_tags = [
-            "Exif.Photo.DateTimeOriginal",
-            "Exif.Photo.DateTimeDigitized",
-        ];
+        let creation_tags = ["Exif.Image.DateTime", "Exif.Image.DateTimeOriginal", "Exif.Image.DateTimeDigitized"];
+        let edition_tags = ["Exif.Photo.DateTimeOriginal", "Exif.Photo.DateTimeDigitized"];
 
         let creation_date = extract_first_tag(&metadata, &creation_tags).unwrap_or(String::new());
         let edition_date = extract_first_tag(&metadata, &edition_tags).unwrap_or(String::new());
@@ -111,16 +103,19 @@ fn gps_val_to_big_decimal(gps_val: Option<f64>, angle_max: i32, decimals: i64) -
         let bd = BigDecimal::from_f64(gps_val);
         if let Some(bd) = bd {
             // Apply a modulo between -angle_max and angle_max
-            return Some(
-                ((bd + BigDecimal::from(angle_max)) % BigDecimal::from(angle_max * 2) - BigDecimal::from(angle_max)).with_scale(decimals),
-            );
+            return Some(((bd + BigDecimal::from(angle_max)) % BigDecimal::from(angle_max * 2) - BigDecimal::from(angle_max)).with_scale(decimals));
         }
     }
     None
 }
 /// Converts a rational to a big decimal with a given number of decimals
 fn rational_to_big_decimal(rational: Option<Ratio<i32>>, decimals: i64) -> Option<BigDecimal> {
-    rational.map(|r| r.to_f64()).flatten().map(|f| BigDecimal::from_f64(f)).flatten().map(|bd| bd.with_scale_round(decimals, bigdecimal::RoundingMode::HalfUp))
+    rational
+        .map(|r| r.to_f64())
+        .flatten()
+        .map(|f| BigDecimal::from_f64(f))
+        .flatten()
+        .map(|bd| bd.with_scale_round(decimals, bigdecimal::RoundingMode::HalfUp))
 }
 
 fn extract_first_tag(metadata: &Metadata, tags: &[&str]) -> Option<String> {
@@ -137,7 +132,7 @@ fn extract_iso(metadata: &Metadata) -> Option<u32> {
     let iso_tags = [
         "Exif.Photo.ISOSpeedRatings",
         "Exif.Photo.PhotographicSensitivity",
-        "Xmp.exifEX.PhotographicSensitivity"
+        "Xmp.exifEX.PhotographicSensitivity",
     ];
 
     for tag in &iso_tags {

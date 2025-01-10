@@ -1,10 +1,9 @@
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use magick_rust::{magick_wand_genesis, MagickWand};
-use std::path::{Path, PathBuf};
 use rocket::request::FromParam;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
+use std::path::{Path, PathBuf};
 use strum_macros::{Display, EnumIter};
 
 #[derive(Display, Debug, PartialEq, Clone, Copy, EnumIter, Deserialize, Serialize, JsonSchema)]
@@ -68,7 +67,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
     Ok(dest_file)
 }
 
-fn get_thumbnail_size(thumbnail_type: PictureThumbnail) -> (usize) {
+fn get_thumbnail_size(thumbnail_type: PictureThumbnail) -> usize {
     match thumbnail_type {
         PictureThumbnail::Original => None,
         PictureThumbnail::Small => Some(100),

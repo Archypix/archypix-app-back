@@ -6,11 +6,10 @@ use rexiv2::Rexiv2Error;
 use rocket::serde::json::Json;
 use rocket::Request;
 use rocket_okapi::gen::OpenApiGenerator;
-use rocket_okapi::okapi::openapi3::{MediaType, RefOr, Responses};
+use rocket_okapi::okapi::openapi3::Responses;
 use rocket_okapi::response::OpenApiResponderInner;
 use schemars::JsonSchema;
 use serde::Serialize;
-use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
 /// Rocket Responder for all errors
@@ -43,7 +42,8 @@ impl ErrorResponder {
             ErrorResponder::NotFound(json) => json,
             ErrorResponder::UnprocessableEntity(json) => json,
             ErrorResponder::InternalError(json) => json,
-        }.rollback
+        }
+        .rollback
     }
 }
 /// Dummy implementation for OpenApi
@@ -91,7 +91,7 @@ pub enum ErrorType {
     // Sign in types
     InvalidEmailOrPassword,
     TFARequiredOverEmail, // Only email confirm available
-    TFARequired, // TOTP or email confirm available
+    TFARequired,          // TOTP or email confirm available
     InvalidTOTPCode,
     // Sign up types
     EmailAlreadyExists,
@@ -136,8 +136,12 @@ impl ErrorType {
             ErrorType::BadRequest => ErrorResponder::BadRequest(Self::create_response("Bad request".to_string(), kind, rollback)),
             ErrorType::Unauthorized => ErrorResponder::Unauthorized(Self::create_response("Unauthorized".to_string(), kind, rollback)),
             ErrorType::NotFound(path) => ErrorResponder::NotFound(Self::create_response(format!("Not found: {}", path), kind, rollback)),
-            ErrorType::UnprocessableEntity => ErrorResponder::UnprocessableEntity(Self::create_response("Unprocessable entity".to_string(), kind, rollback)),
-            ErrorType::InternalError(msg) => ErrorResponder::InternalError(Self::create_response(format!("Internal error: {}", msg).to_string(), kind, rollback)),
+            ErrorType::UnprocessableEntity => {
+                ErrorResponder::UnprocessableEntity(Self::create_response("Unprocessable entity".to_string(), kind, rollback))
+            }
+            ErrorType::InternalError(msg) => {
+                ErrorResponder::InternalError(Self::create_response(format!("Internal error: {}", msg).to_string(), kind, rollback))
+            }
             // Form validation (see UnprocessableEntity for type check related errors)
             ErrorType::InvalidInput(msg) => ErrorResponder::UnprocessableEntity(Self::create_response(msg, kind, rollback)),
             // Sign in / status types
@@ -145,33 +149,54 @@ impl ErrorType {
             ErrorType::UserBanned => ErrorResponder::Unauthorized(Self::create_response("User is banned".to_string(), kind, rollback)),
             ErrorType::UserUnconfirmed => ErrorResponder::Unauthorized(Self::create_response("User is not confirmed".to_string(), kind, rollback)),
             // Sign in types
-            ErrorType::InvalidEmailOrPassword => ErrorResponder::Unauthorized(Self::create_response("Invalid email or password".to_string(), kind, rollback)),
-            ErrorType::TFARequiredOverEmail => ErrorResponder::Unauthorized(Self::create_response("2FA required over email".to_string(), kind, rollback)),
+            ErrorType::InvalidEmailOrPassword => {
+                ErrorResponder::Unauthorized(Self::create_response("Invalid email or password".to_string(), kind, rollback))
+            }
+            ErrorType::TFARequiredOverEmail => {
+                ErrorResponder::Unauthorized(Self::create_response("2FA required over email".to_string(), kind, rollback))
+            }
             ErrorType::TFARequired => ErrorResponder::Unauthorized(Self::create_response("2FA required".to_string(), kind, rollback)),
             ErrorType::InvalidTOTPCode => ErrorResponder::Unauthorized(Self::create_response("Invalid TOTP code".to_string(), kind, rollback)),
             // Sign up types
             ErrorType::EmailAlreadyExists => ErrorResponder::Unauthorized(Self::create_response("Email already exists".to_string(), kind, rollback)),
             // Confirm
-            ErrorType::ConfirmationAlreadyUsed => ErrorResponder::Unauthorized(Self::create_response("Confirmation code/token already used".to_string(), kind, rollback)),
-            ErrorType::ConfirmationExpired => ErrorResponder::Unauthorized(Self::create_response("Confirmation code/token expired".to_string(), kind, rollback)),
-            ErrorType::ConfirmationTooManyAttempts => ErrorResponder::Unauthorized(Self::create_response("Too many attempts".to_string(), kind, rollback)),
+            ErrorType::ConfirmationAlreadyUsed => {
+                ErrorResponder::Unauthorized(Self::create_response("Confirmation code/token already used".to_string(), kind, rollback))
+            }
+            ErrorType::ConfirmationExpired => {
+                ErrorResponder::Unauthorized(Self::create_response("Confirmation code/token expired".to_string(), kind, rollback))
+            }
+            ErrorType::ConfirmationTooManyAttempts => {
+                ErrorResponder::Unauthorized(Self::create_response("Too many attempts".to_string(), kind, rollback))
+            }
             ErrorType::ConfirmationNotFound => ErrorResponder::Unauthorized(Self::create_response("Invalid code/token".to_string(), kind, rollback)),
             // Admin
             ErrorType::UserNotAdmin => ErrorResponder::Unauthorized(Self::create_response("User is not an admin".to_string(), kind, rollback)),
             // Database error
-            ErrorType::DatabaseError(msg, err) => ErrorResponder::InternalError(Self::create_response(format!("Database error: {} - {}", msg, err), kind, rollback)),
+            ErrorType::DatabaseError(msg, err) => {
+                ErrorResponder::InternalError(Self::create_response(format!("Database error: {} - {}", msg, err), kind, rollback))
+            }
             // Pictures and files
-            ErrorType::UnableToLoadExifMetadata(err) => ErrorResponder::InternalError(Self::create_response(format!("Unable to load Exif metadata: {}", err.to_string()), kind, rollback)),
+            ErrorType::UnableToLoadExifMetadata(err) => ErrorResponder::InternalError(Self::create_response(
+                format!("Unable to load Exif metadata: {}", err.to_string()),
+                kind,
+                rollback,
+            )),
             ErrorType::S3Error(msg) => ErrorResponder::InternalError(Self::create_response(format!("S3 error: {}", msg), kind, rollback)),
-            ErrorType::UnableToCreateThumbnail(msg) => ErrorResponder::InternalError(Self::create_response(format!("Unable to create thumbnail: {}", msg), kind, rollback)),
+            ErrorType::UnableToCreateThumbnail(msg) => {
+                ErrorResponder::InternalError(Self::create_response(format!("Unable to create thumbnail: {}", msg), kind, rollback))
+            }
         }
     }
     /// Converts to an [`ErrorResponse`] struct
     fn create_response(message: String, error_type: ErrorTypeKind, rollback: bool) -> Json<ErrorResponse> {
-        Json(ErrorResponse { message, error_type, rollback })
+        Json(ErrorResponse {
+            message,
+            error_type,
+            rollback,
+        })
     }
 }
-
 
 #[catch(400)]
 pub fn bad_request() -> ErrorResponder {
@@ -194,7 +219,6 @@ pub fn unprocessable_entity() -> ErrorResponder {
 pub fn internal_error() -> ErrorResponder {
     ErrorType::InternalError(String::from("Internal Error")).res()
 }
-
 
 /// Diesel transaction encapsulation to handle rollback
 /// depending on the rollback boolean value contained in the returned Err(ErrorResponder) struct.

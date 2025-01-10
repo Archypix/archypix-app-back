@@ -6,12 +6,10 @@ use crate::mailing::mailer::send_rendered_email;
 use crate::utils::auth::DeviceInfo;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use crate::utils::utils::{get_frontend_host, left_pad};
-use diesel::Connection;
 use pwhash::bcrypt;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::{openapi, JsonSchema};
-use std::env;
 
 #[derive(JsonSchema, Deserialize, Debug)]
 pub struct SigninData {
@@ -19,7 +17,7 @@ pub struct SigninData {
     password: String,
     totp_code: Option<String>,
     /// Optional redirect URL for the TFA confirmation (email confirmation)
-    redirect_url: Option<String>
+    redirect_url: Option<String>,
 }
 
 #[derive(JsonSchema, Serialize, Debug)]
@@ -34,7 +32,7 @@ pub struct SigninResponse {
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct SigninEmailResponse {
     pub user_id: u32,
-    pub code_token: String
+    pub code_token: String,
 }
 
 /// Endpoint to sign in a user.
@@ -73,16 +71,20 @@ pub fn auth_signin(data: Json<SigninData>, db: &rocket::State<DBPool>, device_in
     })
 }
 
-
 /// Login endpoint for users that require 2FA; sends a confirmation email.
 #[openapi(tag = "Authentication")]
 #[post("/auth/signin/email", data = "<data>")]
-pub fn auth_signin_email(data: Json<SigninData>, db: &rocket::State<DBPool>, device_info: DeviceInfo) -> Result<Json<SigninEmailResponse>, ErrorResponder> {
+pub fn auth_signin_email(
+    data: Json<SigninData>,
+    db: &rocket::State<DBPool>,
+    device_info: DeviceInfo,
+) -> Result<Json<SigninEmailResponse>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
     err_transaction(conn, |conn| {
         let user = check_user_password_and_status(conn, &data.email, &data.password)?;
 
-        let (token, code_token, code) = Confirmation::insert_confirmation(conn, user.id, ConfirmationAction::Signin, &device_info, &data.redirect_url, 0)?;
+        let (token, code_token, code) =
+            Confirmation::insert_confirmation(conn, user.id, ConfirmationAction::Signin, &device_info, &data.redirect_url, 0)?;
         let code_str = left_pad(&code.to_string(), '0', 4);
 
         // Sending email
@@ -108,25 +110,18 @@ pub fn auth_signin_email(data: Json<SigninData>, db: &rocket::State<DBPool>, dev
 /// - Throw `UserBanned` if the user is banned.
 /// - Throw `UserUnconfirmed` if the user is unconfirmed (account not email verified).
 fn check_user_password_and_status(conn: &mut DBConn, email: &str, password: &str) -> Result<User, ErrorResponder> {
-    let user = User::find_by_email_opt(conn, email)
-        .and_then(|user| {
-            if let Some(user) = user {
-                if bcrypt::verify(password, &*user.password_hash) {
-                    return Ok(user);
-                }
+    let user = User::find_by_email_opt(conn, email).and_then(|user| {
+        if let Some(user) = user {
+            if bcrypt::verify(password, &*user.password_hash) {
+                return Ok(user);
             }
-            ErrorType::InvalidEmailOrPassword.res_err()
-        })?;
+        }
+        ErrorType::InvalidEmailOrPassword.res_err()
+    })?;
 
     match user.status {
-        UserStatus::Banned => {
-            ErrorType::UserBanned.res_err()
-        }
-        UserStatus::Unconfirmed => {
-            ErrorType::UserUnconfirmed.res_err()
-        }
-        _ => {
-            Ok(user)
-        }
+        UserStatus::Banned => ErrorType::UserBanned.res_err(),
+        UserStatus::Unconfirmed => ErrorType::UserUnconfirmed.res_err(),
+        _ => Ok(user),
     }
 }

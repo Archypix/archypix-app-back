@@ -3,10 +3,9 @@ use std::env;
 
 use crate::utils::utils::get_frontend_host;
 use lettre::message::header::ContentType;
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::{AsyncSmtpTransport, AsyncTransport, Message, SmtpTransport, Tokio1Executor, Transport};
 use lettre::message::{MultiPart, SinglePart};
-use lettre::transport::smtp::client::Tls;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use rocket::serde::json::from_str;
 use tera::{Context, Tera};
 use tokio::task;
@@ -35,8 +34,9 @@ pub fn send_rendered_email(to: (String, String), subject: String, template: Stri
 /// Inserts the frontend url in the context
 fn render_email_context(template: String, mut context: Context) -> String {
     context.insert("archypix_url", &get_frontend_host());
-    TEMPLATES.render(format!("{}.html", template).as_str(), &context)
-            .expect("Unable to render email template.")
+    TEMPLATES
+        .render(format!("{}.html", template).as_str(), &context)
+        .expect("Unable to render email template.")
 }
 
 /// Sends an email with the provided raw text and HTML content
@@ -49,7 +49,8 @@ fn send_email(to: (String, String), subject: String, body_text: String, body_htm
 async fn send_email_async(to: (String, String), subject: String, body_text: String, body_html: String) {
     let server: String = env::var("SMTP_SERVER").expect("SMTP_SERVER must be set");
     let server_port: u16 = env::var("SMTP_SERVER_PORT")
-        .map(|port| from_str::<u16>(port.as_str()).unwrap_or(465)).unwrap_or(465);
+        .map(|port| from_str::<u16>(port.as_str()).unwrap_or(465))
+        .unwrap_or(465);
     let from_name: String = env::var("SMTP_FROM_NAME").expect("SMTP_FROM_NAME must be set");
     let from_address: String = env::var("SMTP_FROM_ADDRESS").expect("SMTP_FROM_NAME must be set");
     let username: String = env::var("SMTP_USERNAME").expect("SMTP_USERNAME must be set");
@@ -61,16 +62,8 @@ async fn send_email_async(to: (String, String), subject: String, body_text: Stri
         .subject(subject)
         .multipart(
             MultiPart::alternative()
-                .singlepart(
-                    SinglePart::builder()
-                        .header(ContentType::TEXT_PLAIN)
-                        .body(body_text),
-                )
-                .singlepart(
-                    SinglePart::builder()
-                        .header(ContentType::TEXT_HTML)
-                        .body(body_html),
-                ),
+                .singlepart(SinglePart::builder().header(ContentType::TEXT_PLAIN).body(body_text))
+                .singlepart(SinglePart::builder().header(ContentType::TEXT_HTML).body(body_html)),
         )
         .expect("Failed to build email");
 
