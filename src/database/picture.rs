@@ -11,7 +11,6 @@ use diesel::JoinOnDsl;
 use diesel::QueryDsl;
 use diesel::{select, Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
 use diesel_derives::Insertable;
-use rocket::futures::StreamExt;
 use rocket_okapi::JsonSchema;
 use serde::Serialize;
 

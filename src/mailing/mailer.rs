@@ -68,6 +68,7 @@ async fn send_email_async(to: (String, String), subject: String, body_text: Stri
         .expect("Failed to build email");
 
     let mailer = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(server.as_str())
+        .port(server_port)
         .timeout(Some(std::time::Duration::from_secs(10)))
         .credentials(Credentials::new(username, password))
         .build();

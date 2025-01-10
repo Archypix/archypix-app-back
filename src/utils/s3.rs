@@ -8,7 +8,6 @@ use aws_smithy_types::byte_stream::ByteStream;
 use std::env;
 use std::path::Path;
 use std::time::Duration;
-use strum::IntoEnumIterator;
 
 /// Should match the thumbnails type in utils::thumbnail::PictureThumbnail
 const BUCKETS: [&str; 4] = [
@@ -72,12 +71,12 @@ impl PictureStorer {
             .body(
                 ByteStream::from_path(path)
                     .await
-                    .map_err(|e| ErrorType::S3Error(String::from("Unable to read file")).res_rollback())?,
+                    .map_err(|_e| ErrorType::S3Error(String::from("Unable to read file")).res_rollback())?,
             )
             .send()
             .await
             .map(|_| ())
-            .map_err(|e| ErrorType::S3Error(String::from("Unable to store object")).res_rollback())
+            .map_err(|_e| ErrorType::S3Error(String::from("Unable to store object")).res_rollback())
     }
 
     pub async fn get_picture(&self, picture_thumbnail: PictureThumbnail, id: u64) -> Result<ByteStream, ErrorResponder> {
@@ -88,7 +87,7 @@ impl PictureStorer {
             .send()
             .await
             .map(|output| output.body)
-            .map_err(|e| ErrorType::S3Error(String::from("Unable to retrieve object")).res_rollback())
+            .map_err(|_e| ErrorType::S3Error(String::from("Unable to retrieve object")).res_rollback())
     }
 
     pub async fn get_picture_as_url(&self, picture_thumbnail: PictureThumbnail, id: u64) -> Result<String, ErrorResponder> {
@@ -104,6 +103,6 @@ impl PictureStorer {
             )
             .await
             .map(|output| String::from(output.uri()))
-            .map_err(|e| ErrorType::S3Error(String::from("Unable to retrieve object")).res_rollback())
+            .map_err(|_e| ErrorType::S3Error(String::from("Unable to retrieve object")).res_rollback())
     }
 }

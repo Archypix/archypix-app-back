@@ -48,7 +48,7 @@ impl ErrorResponder {
 }
 /// Dummy implementation for OpenApi
 impl OpenApiResponderInner for ErrorResponder {
-    fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
+    fn responses(_: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
         Ok(Responses::default())
     }
 }

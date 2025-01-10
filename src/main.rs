@@ -51,11 +51,11 @@ mod database {
     pub mod user;
     pub mod utils;
 }
-mod ftp_server {
+/*mod ftp_server {
     pub mod ftp;
     pub mod ftp_auth;
     pub mod ftp_backend;
-}
+}*/
 mod grouping {
     pub mod grouping_strategy;
 }

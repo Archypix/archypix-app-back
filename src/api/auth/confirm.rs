@@ -1,4 +1,3 @@
-use crate::api::auth::signin::SigninResponse;
 use crate::database::auth_token::{AuthToken, Confirmation};
 use crate::database::database::{DBConn, DBPool};
 use crate::database::schema::ConfirmationAction;
@@ -8,11 +7,9 @@ use crate::utils::auth::{DeviceInfo, UserAuthInfo};
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use crate::utils::utils::get_frontend_host;
 use crate::utils::validation::validate_input;
-use diesel::Connection;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::{openapi, JsonSchema};
-use std::env;
 use validator::Validate;
 
 #[derive(JsonSchema, Deserialize, Debug, Validate)]
@@ -51,7 +48,12 @@ pub enum ConfirmResponse {
 /// Confirm any 2FA request with a code_token and a code (from email code).
 #[openapi(tag = "Authentication")]
 #[post("/auth/confirm/code", data = "<data>")]
-pub fn auth_confirm_code(data: Json<ConfirmCodeData>, db: &rocket::State<DBPool>, user_auth_info: UserAuthInfo, device_info: DeviceInfo) -> Result<Json<ConfirmResponse>, ErrorResponder> {
+pub fn auth_confirm_code(
+    data: Json<ConfirmCodeData>,
+    db: &rocket::State<DBPool>,
+    user_auth_info: UserAuthInfo,
+    device_info: DeviceInfo,
+) -> Result<Json<ConfirmResponse>, ErrorResponder> {
     validate_input(&data)?;
     let conn: &mut DBConn = &mut db.get().unwrap();
     let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res())?;
@@ -60,8 +62,8 @@ pub fn auth_confirm_code(data: Json<ConfirmCodeData>, db: &rocket::State<DBPool>
     let code_token = hex::decode(&data.code_token).map_err(|_| ErrorType::UnprocessableEntity.res())?;
 
     err_transaction(conn, |conn| {
-        let redirect_url = Confirmation::check_code_and_mark_as_used(conn, &user_id, &data.action, &code_token, &data.code, 15)?
-            .unwrap_or(get_frontend_host());
+        let redirect_url =
+            Confirmation::check_code_and_mark_as_used(conn, &user_id, &data.action, &code_token, &data.code, 15)?.unwrap_or(get_frontend_host());
         confirm_execute(conn, &data.action, user, redirect_url, &device_info)
     })
 }
@@ -69,7 +71,12 @@ pub fn auth_confirm_code(data: Json<ConfirmCodeData>, db: &rocket::State<DBPool>
 /// Confirm any 2FA request with a token (from email link).
 #[openapi(tag = "Authentication")]
 #[post("/auth/confirm/token", data = "<data>")]
-pub fn auth_confirm_token(data: Json<ConfirmTokenData>, db: &rocket::State<DBPool>, user_auth_info: UserAuthInfo, device_info: DeviceInfo) -> Result<Json<ConfirmResponse>, ErrorResponder> {
+pub fn auth_confirm_token(
+    data: Json<ConfirmTokenData>,
+    db: &rocket::State<DBPool>,
+    user_auth_info: UserAuthInfo,
+    device_info: DeviceInfo,
+) -> Result<Json<ConfirmResponse>, ErrorResponder> {
     validate_input(&data)?;
     let conn: &mut DBConn = &mut db.get().unwrap();
     let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res())?;
@@ -78,15 +85,20 @@ pub fn auth_confirm_token(data: Json<ConfirmTokenData>, db: &rocket::State<DBPoo
     let token = hex::decode(&data.token).map_err(|_| ErrorType::UnprocessableEntity.res())?;
 
     err_transaction(conn, |conn| {
-        let redirect_url = Confirmation::check_token_and_mark_as_used(conn, &user_id, &data.action, &token, 15)?
-            .unwrap_or(get_frontend_host());
+        let redirect_url = Confirmation::check_token_and_mark_as_used(conn, &user_id, &data.action, &token, 15)?.unwrap_or(get_frontend_host());
         confirm_execute(conn, &data.action, user, redirect_url, &device_info)
     })
 }
 
 /// Execute the confirmation action and return the response.
 /// This function is called after the confirmation code or token is validated.
-fn confirm_execute(conn: &mut DBConn, action: &ConfirmationAction, user: User, redirect_url: String, device_info: &DeviceInfo) -> Result<Json<ConfirmResponse>, ErrorResponder> {
+fn confirm_execute(
+    conn: &mut DBConn,
+    action: &ConfirmationAction,
+    user: User,
+    redirect_url: String,
+    device_info: &DeviceInfo,
+) -> Result<Json<ConfirmResponse>, ErrorResponder> {
     match action {
         ConfirmationAction::Signup => {
             user.switch_status(conn, &UserStatus::Normal)?;
@@ -112,8 +124,6 @@ fn confirm_execute(conn: &mut DBConn, action: &ConfirmationAction, user: User, r
                 redirect_url,
             })))
         }
-        _ => {
-            ErrorType::BadRequest.res_err()
-        }
+        _ => ErrorType::BadRequest.res_err(),
     }
 }

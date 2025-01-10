@@ -72,7 +72,8 @@ impl OpenApiFromRequest<'_> for User {
                 },
                 extensions: Default::default(),
             },
-            requirement))
+            requirement,
+        ))
     }
 }
 /// Request Guard with the only purpose of extracting the user id and auth token from the headers.
@@ -86,10 +87,7 @@ impl<'r> FromRequest<'r> for UserAuthInfo {
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let user_id = User::get_id_from_headers(request);
         let auth_token = AuthToken::get_auth_token_from_headers(request);
-        Outcome::Success(UserAuthInfo {
-            user_id,
-            auth_token,
-        })
+        Outcome::Success(UserAuthInfo { user_id, auth_token })
     }
 }
 /// OpenAPI documentation for the UserAuthInfo request guard.
@@ -124,7 +122,10 @@ pub struct DeviceInfo {
 impl<'r> FromRequest<'r> for DeviceInfo {
     type Error = ();
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let mut ip_address = request.remote().map(|s| s.to_string()).or(request.headers().get_one("X-Forwarded-For").map(|s| s.to_string()));
+        let mut ip_address = request
+            .remote()
+            .map(|s| s.to_string())
+            .or(request.headers().get_one("X-Forwarded-For").map(|s| s.to_string()));
 
         let device = Device::from_request(request).await.unwrap();
         let os = OS::from_request(request).await.unwrap();
@@ -145,15 +146,12 @@ impl<'r> FromRequest<'r> for DeviceInfo {
             }
         }
 
-        Outcome::Success(DeviceInfo {
-            device_string,
-            ip_address,
-        })
+        Outcome::Success(DeviceInfo { device_string, ip_address })
     }
 }
 /// OpenAPI documentation for the DeviceInfo request guard.
 impl OpenApiFromRequest<'_> for DeviceInfo {
-    fn from_request_input(gen: &mut OpenApiGenerator, name: String, required: bool) -> rocket_okapi::Result<RequestHeaderInput> {
+    fn from_request_input(gen: &mut OpenApiGenerator, _: String, _: bool) -> rocket_okapi::Result<RequestHeaderInput> {
         // Specify needed header: user-agent
         Ok(RequestHeaderInput::Parameter(Parameter {
             name: "User-Agent".to_string(),

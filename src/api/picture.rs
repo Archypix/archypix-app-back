@@ -39,9 +39,8 @@ impl JsonSchema for UploadPictureData<'_> {
     fn schema_name() -> String {
         String::from("Upload")
     }
-    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+    fn json_schema(_gen: &mut SchemaGenerator) -> Schema {
         let schema = SchemaObject::default();
-
         Schema::Object(schema)
     }
 }
@@ -62,7 +61,6 @@ pub async fn add_picture(
     let file_name_ascii = file_name.chars().filter(|c| c.is_ascii()).collect::<String>();
     let temp_file_name = format!("{}-{}", random::<u16>(), file_name_ascii);
 
-    let temp_file_name_clone = temp_file_name.clone();
     let res = {
         // Saving the file
         if let Err(e) = upload.file.persist_to(Path::new(ORIGINAL_TEMP_DIR).join(temp_file_name.clone())).await {
@@ -123,7 +121,7 @@ pub async fn add_picture(
     res
 }
 
-struct PictureStream {
+pub struct PictureStream {
     picture_id: u64,
     picture_stream: ByteStream,
 }
