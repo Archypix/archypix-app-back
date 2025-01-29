@@ -85,14 +85,14 @@ joinable!(totp_secrets -> users (user_id));
 allow_tables_to_appear_in_same_query!(totp_secrets, users);
 
 table! {
-    shares_auto_accept (user_id_acceptor, user_id_sharer) {
-        user_id_acceptor -> Unsigned<Integer>,
-        user_id_sharer -> Unsigned<Integer>,
+    friends (user_id_1, user_id_2) {
+        user_id_1 -> Unsigned<Integer>,
+        user_id_2 -> Unsigned<Integer>,
     }
 }
-joinable!(shares_auto_accept -> users (user_id_acceptor));
-// joinable!(shares_auto_accept -> users (user_id_sharer));
-allow_tables_to_appear_in_same_query!(shares_auto_accept, users);
+joinable!(friends -> users (user_id_1));
+// joinable!(friends -> users (user_id_2));
+allow_tables_to_appear_in_same_query!(friends, users);
 
 table! {
     tag_groups (id) {

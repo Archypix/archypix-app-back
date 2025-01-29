@@ -3,11 +3,11 @@ CREATE TABLE users
     CONSTRAINT PK_users PRIMARY KEY (id),
     id               INT UNSIGNED AUTO_INCREMENT,
     name             VARCHAR(32)                                       NOT NULL,
-    email VARCHAR(320) NOT NULL UNIQUE,
+    email     VARCHAR(320) NOT NULL UNIQUE,
     password_hash    CHAR(60)                                          NOT NULL,
     creation_date    DATETIME                                          NOT NULL DEFAULT (UTC_TIMESTAMP()),
     status           ENUM ('unconfirmed', 'normal', 'banned', 'admin') NOT NULL DEFAULT 'unconfirmed',
-    tfa_login BOOLEAN NOT NULL DEFAULT FALSE,
+    tfa_login BOOLEAN      NOT NULL DEFAULT FALSE,
     storage_count_ko BIGINT UNSIGNED                                   NOT NULL DEFAULT 0,
     storage_limit_mo INT UNSIGNED                                      NOT NULL DEFAULT 0
 );
@@ -30,10 +30,10 @@ CREATE TABLE confirmations
     CONSTRAINT UQ_confirmations UNIQUE (user_id, action, code_token),
     user_id       INT UNSIGNED                                NOT NULL,
     action        ENUM ('signup', 'signin', 'delete_account') NOT NULL,
-    used       BOOLEAN    NOT NULL DEFAULT FALSE,
+    used         BOOLEAN    NOT NULL DEFAULT FALSE,
     date          DATETIME                                    NOT NULL DEFAULT (UTC_TIMESTAMP()),
     token         BINARY(16)                                  NOT NULL,
-    code_token BINARY(16) NOT NULL,
+    code_token   BINARY(16) NOT NULL,
     code          SMALLINT UNSIGNED                           NOT NULL,
     code_trials   TINYINT UNSIGNED                            NOT NULL DEFAULT 0,
     redirect_url VARCHAR(255),
@@ -51,13 +51,13 @@ CREATE TABLE totp_secrets
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
-CREATE TABLE shares_auto_accept
+CREATE TABLE friends
 (
-    CONSTRAINT PK_shares_auto_accept PRIMARY KEY (user_id_acceptor, user_id_sharer),
-    user_id_acceptor INT UNSIGNED,
-    user_id_sharer   INT UNSIGNED,
-    FOREIGN KEY (user_id_acceptor) REFERENCES users (id),
-    FOREIGN KEY (user_id_sharer) REFERENCES users (id)
+    CONSTRAINT PK_friends PRIMARY KEY (user_id_1, user_id_2),
+    user_id_1 INT UNSIGNED,
+    user_id_2 INT UNSIGNED,
+    FOREIGN KEY (user_id_1) REFERENCES users (id),
+    FOREIGN KEY (user_id_2) REFERENCES users (id)
 );
 
 CREATE TABLE tag_groups

@@ -25,19 +25,17 @@ pub struct User {
 }
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
-#[diesel(primary_key(user_id_acceptor, user_id_sharer))]
-#[diesel(belongs_to(User, foreign_key = user_id_acceptor, foreign_key = user_id_sharer))]
-#[diesel(table_name = shares_auto_accept)]
-pub struct ShareAutoAccept {
-    pub user_id_acceptor: u32,
-    pub user_id_sharer: u32,
+#[diesel(primary_key(user_id_1, user_id_2))]
+#[diesel(belongs_to(User, foreign_key = user_id_1, foreign_key = user_id_2))]
+#[diesel(table_name = friends)]
+pub struct Friends {
+    pub user_id_1: u32,
+    pub user_id_2: u32,
 }
 
 impl User {
     pub fn from_id(conn: &mut DBConn, id: &u32) -> Result<User, ErrorResponder> {
-        User::from_id_opt(conn, id).and_then(|user_opt| {
-            user_opt.ok_or_else(|| ErrorType::UserNotFound.res())
-        })
+        User::from_id_opt(conn, id).and_then(|user_opt| user_opt.ok_or_else(|| ErrorType::UserNotFound.res()))
     }
     pub fn from_id_opt(conn: &mut DBConn, id: &u32) -> Result<Option<User>, ErrorResponder> {
         users::table
@@ -45,31 +43,21 @@ impl User {
             .select(User::as_select())
             .first::<User>(conn)
             .optional()
-            .map_err(|e| {
-                ErrorType::DatabaseError("Failed to get user from id".to_string(), e).res_rollback()
-            })
+            .map_err(|e| ErrorType::DatabaseError("Failed to get user from id".to_string(), e).res_rollback())
     }
     pub fn find_logged_in(conn: &mut DBConn, user_id: u32, auth_token: Vec<u8>) -> Result<(User, AuthToken), ErrorResponder> {
-        User::find_logged_in_opt(conn, user_id, auth_token)
-            .and_then(|data| {
-                data.ok_or_else(|| ErrorType::UserNotFound.res())
-            })
+        User::find_logged_in_opt(conn, user_id, auth_token).and_then(|data| data.ok_or_else(|| ErrorType::UserNotFound.res()))
     }
     pub fn find_logged_in_opt(conn: &mut DBConn, user_id: u32, auth_token: Vec<u8>) -> Result<Option<(User, AuthToken)>, ErrorResponder> {
-        users::table.left_join(auth_tokens::table)
+        users::table
+            .left_join(auth_tokens::table)
             .filter(users::dsl::id.eq(user_id))
             .filter(auth_tokens::dsl::token.eq(auth_token))
             .select((User::as_select(), Option::<AuthToken>::as_select()))
             .first::<(User, Option<AuthToken>)>(conn)
             .optional()
-            .map_err(|e| {
-                ErrorType::DatabaseError("Failed to get user and auth token".to_string(), e).res_rollback()
-            })
-            .map(|data| {
-                data.and_then(|(user, auth)| {
-                    auth.map(|auth| (user, auth))
-                })
-            })
+            .map_err(|e| ErrorType::DatabaseError("Failed to get user and auth token".to_string(), e).res_rollback())
+            .map(|data| data.and_then(|(user, auth)| auth.map(|auth| (user, auth))))
     }
 
     pub fn find_by_email_opt(conn: &mut DBConn, email: &str) -> Result<Option<User>, ErrorResponder> {
@@ -78,9 +66,7 @@ impl User {
             .select(User::as_select())
             .first::<User>(conn)
             .optional()
-            .map_err(|e| {
-                ErrorType::DatabaseError("Failed to get user from email".to_string(), e).res_rollback()
-            })
+            .map_err(|e| ErrorType::DatabaseError("Failed to get user from email".to_string(), e).res_rollback())
     }
 
     pub(crate) fn create_user(conn: &mut DBConn, name: &str, email: &str, password: &str) -> Result<u32, ErrorResponder> {
@@ -99,9 +85,7 @@ impl User {
                     users::dsl::creation_date.eq(chrono::Utc::now().naive_utc()),
                 ))
                 .execute(conn)
-                .map_err(|e| {
-                    ErrorType::DatabaseError("Failed to update user name and password.".to_string(), e).res_rollback()
-                })?;
+                .map_err(|e| ErrorType::DatabaseError("Failed to update user name and password.".to_string(), e).res_rollback())?;
 
             // Only the latest singup confirmation is valid
             Confirmation::mark_all_as_used(conn, &user.id, ConfirmationAction::Signup)?;
@@ -116,15 +100,12 @@ impl User {
                 users::dsl::password_hash.eq(bcrypt::hash(password).unwrap()),
             ))
             .execute(conn)
-            .map_err(|e| {
-                ErrorType::DatabaseError("Failed to insert user".to_string(), e).res_rollback()
-            })
+            .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res_rollback())
             .and_then(|_| {
-                select(last_insert_id()).get_result::<u64>(conn)
+                select(last_insert_id())
+                    .get_result::<u64>(conn)
                     .map(|id| id as u32)
-                    .map_err(|e| {
-                        ErrorType::DatabaseError("Failed to get last insert id".to_string(), e).res_rollback()
-                    })
+                    .map_err(|e| ErrorType::DatabaseError("Failed to get last insert id".to_string(), e).res_rollback())
             })
     }
 
@@ -136,9 +117,7 @@ impl User {
             .filter(users::dsl::id.eq(user_id))
             .set(users::dsl::status.eq(status))
             .execute(conn)
-            .map_err(|e| {
-                ErrorType::DatabaseError("Failed to update user status".to_string(), e).res_rollback()
-            })?;
+            .map_err(|e| ErrorType::DatabaseError("Failed to update user status".to_string(), e).res_rollback())?;
         Ok(())
     }
 
@@ -147,4 +126,4 @@ impl User {
     }
 }
 
-impl ShareAutoAccept {}
+impl Friends {}

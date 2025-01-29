@@ -1,7 +1,7 @@
 DROP TABLE IF EXISTS auth_tokens;
 DROP TABLE IF EXISTS confirmations;
 DROP TABLE IF EXISTS totp_secrets;
-DROP TABLE IF EXISTS shares_auto_accept;
+DROP TABLE IF EXISTS friends;
 DROP TABLE IF EXISTS pictures_tags;
 DROP TABLE IF EXISTS duplicates;
 DROP TABLE IF EXISTS duplicate_groups;
