@@ -1,7 +1,7 @@
 use crate::database::database::DBConn;
 use crate::database::schema::PictureOrientation;
 use crate::database::schema::*;
-use crate::database::user::User;
+use crate::database::user::user::User;
 use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use bigdecimal::BigDecimal;
@@ -120,15 +120,4 @@ impl Picture {
 
         Ok(picture)
     }
-}
-
-#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
-#[diesel(primary_key(user_id, picture_id))]
-#[diesel(belongs_to(User))]
-#[diesel(belongs_to(Picture))]
-#[diesel(table_name = ratings)]
-pub struct Rating {
-    pub user_id: u32,
-    pub picture_id: u64,
-    pub rating: i8,
 }

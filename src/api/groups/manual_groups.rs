@@ -1,7 +1,7 @@
 use crate::database::database::DBPool;
-use crate::database::group::Arrangement;
-use crate::database::group::Group;
-use crate::database::user::User;
+use crate::database::group::arrangement::Arrangement;
+use crate::database::group::group::Group;
+use crate::database::user::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::State;

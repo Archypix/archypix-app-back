@@ -1,6 +1,6 @@
 use crate::database::database::{DBConn, DBPool};
-use crate::database::picture::Picture;
-use crate::database::user::User;
+use crate::database::picture::picture::Picture;
+use crate::database::user::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorResponse, ErrorType};
 use crate::utils::s3::PictureStorer;
 use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};

@@ -3,10 +3,10 @@ use rocket_okapi::{openapi, JsonSchema};
 use serde::Serialize;
 use validator::Validate;
 
-use crate::database::auth_token::Confirmation;
 use crate::database::database::DBPool;
 use crate::database::schema::ConfirmationAction;
-use crate::database::user::User;
+use crate::database::user::confirmation::Confirmation;
+use crate::database::user::user::User;
 use crate::mailing::mailer::send_rendered_email;
 use crate::utils::auth::DeviceInfo;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder};

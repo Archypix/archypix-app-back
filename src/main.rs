@@ -48,22 +48,44 @@ mod api {
     }
 }
 mod database {
-    pub mod auth_token;
     pub mod database;
-    pub mod duplicates;
-    pub mod group;
-    pub mod hierarchy;
-    pub mod picture;
     pub mod schema;
-    pub mod tags;
-    pub mod user;
     pub mod utils;
+
+    pub mod user {
+        pub mod auth_token;
+        pub mod confirmation;
+        pub mod friend;
+        pub mod totp_secret;
+        pub mod user;
+    }
+
+    pub mod group {
+        pub mod arrangement;
+        pub mod group;
+        pub mod group_picture;
+        pub mod link_share_group;
+        pub mod shared_group;
+    }
+
+    pub mod picture {
+        pub mod duplicate;
+        pub mod duplicate_group;
+        pub mod picture;
+        pub mod picture_tag;
+        pub mod rating;
+    }
+
+    pub mod hierarchy {
+        pub mod hierarchy;
+        pub mod hierarchy_arrangement;
+    }
+
+    pub mod tag {
+        pub mod tag;
+        pub mod tag_group;
+    }
 }
-/*mod ftp_server {
-    pub mod ftp;
-    pub mod ftp_auth;
-    pub mod ftp_backend;
-}*/
 mod grouping {
     pub mod grouping_strategy;
 }

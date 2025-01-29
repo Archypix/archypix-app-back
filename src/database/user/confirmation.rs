@@ -4,77 +4,10 @@ use crate::database::utils::is_error_duplicate_key;
 use crate::utils::auth::DeviceInfo;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use crate::utils::utils::{random_code, random_token};
-use chrono::{Duration, NaiveDateTime, TimeDelta, Utc};
-use diesel::{delete, QueryDsl, SelectableHelper};
+use chrono::{Duration, NaiveDateTime, Utc};
+use diesel::QueryDsl;
 use diesel::{insert_into, update, Identifiable, Insertable, Queryable, RunQueryDsl, Selectable};
 use diesel::{ExpressionMethods, OptionalExtension};
-use rocket::Request;
-use totp_rs::{Rfc6238, TOTP};
-
-#[derive(Queryable, Selectable, Identifiable, Insertable, Debug, PartialEq)]
-#[diesel(primary_key(user_id, token))]
-#[diesel(belongs_to(User))]
-#[diesel(table_name = auth_tokens)]
-pub struct AuthToken {
-    pub user_id: u32,
-    pub token: Vec<u8>,
-    pub creation_date: NaiveDateTime,
-    pub last_use_date: NaiveDateTime,
-    pub device_string: Option<String>,
-    pub ip_address: Option<Vec<u8>>,
-}
-
-impl AuthToken {
-    pub(crate) fn insert_token_for_user(
-        conn: &mut DBConn,
-        user_id: &u32,
-        device_info: &DeviceInfo,
-        try_count: u8,
-    ) -> Result<Vec<u8>, ErrorResponder> {
-        let auth_token = random_token(32);
-
-        insert_into(auth_tokens::table)
-            .values((
-                auth_tokens::dsl::user_id.eq(user_id),
-                auth_tokens::dsl::token.eq(&auth_token),
-                auth_tokens::dsl::device_string.eq(&device_info.device_string),
-                auth_tokens::dsl::ip_address.eq(inet6_aton(&device_info.ip_address)),
-            ))
-            .execute(conn)
-            .map(|_| auth_token)
-            .or_else(|e| {
-                if is_error_duplicate_key(&e, "auth_tokens.PRIMARY") && try_count < 4 {
-                    println!("Auth token already exists, trying again.");
-                    return AuthToken::insert_token_for_user(conn, user_id, device_info, try_count + 1);
-                }
-                ErrorType::DatabaseError("Failed to insert auth token".to_string(), e).res_err_rollback()
-            })
-    }
-    pub fn update_last_use_date(&self, conn: &mut DBConn) -> Result<(), ErrorResponder> {
-        // Working in UTC time.
-        let current_naive = Utc::now().naive_utc();
-        if current_naive - self.last_use_date > TimeDelta::try_minutes(10).unwrap() {
-            println!("Updating last_use_date of auth_token for user {}", self.user_id);
-            update(auth_tokens::table)
-                .filter(auth_tokens::dsl::user_id.eq(self.user_id))
-                .filter(auth_tokens::dsl::token.eq(self.token.clone()))
-                .set((auth_tokens::dsl::last_use_date.eq(utc_timestamp()),))
-                .execute(conn)
-                .map_err(|e| ErrorType::DatabaseError("Failed to update auth token use date".to_string(), e).res())?;
-        }
-        Ok(())
-    }
-    pub fn get_auth_token_from_headers(request: &Request<'_>) -> Option<Vec<u8>> {
-        request.headers().get_one("X-Auth-Token").map(|s| hex::decode(s).ok()).flatten()
-    }
-    pub fn clear_auth_tokens(conn: &mut DBConn, user_id: &u32) -> Result<(), ErrorResponder> {
-        delete(auth_tokens::table)
-            .filter(auth_tokens::dsl::user_id.eq(user_id))
-            .execute(conn)
-            .map(|_| ())
-            .map_err(|e| ErrorType::DatabaseError("Failed to delete existing auth tokens".to_string(), e).res_rollback())
-    }
-}
 
 #[derive(Queryable, Selectable, Identifiable, Insertable, Debug, PartialEq)]
 #[diesel(primary_key(user_id, token))]
@@ -216,65 +149,5 @@ impl Confirmation {
             .execute(conn)
             .map(|_| ())
             .map_err(|e| ErrorType::DatabaseError("Failed to mark all confirmations as used".to_string(), e).res_rollback())
-    }
-}
-
-#[derive(Queryable, Selectable, Identifiable, Insertable, Debug, PartialEq)]
-#[diesel(primary_key(user_id))]
-#[diesel(belongs_to(User))]
-#[diesel(table_name = totp_secrets)]
-pub struct TOTPSecret {
-    pub user_id: u32,
-    pub creation_date: NaiveDateTime,
-    pub secret: Vec<u8>,
-}
-
-impl TOTPSecret {
-    pub fn insert_secret_for_user(conn: &mut DBConn, user_id: &u32, secret: &Vec<u8>) -> Result<(), ErrorResponder> {
-        insert_into(totp_secrets::table)
-            .values((totp_secrets::dsl::user_id.eq(user_id), totp_secrets::dsl::secret.eq(secret)))
-            .execute(conn)
-            .map(|_| ())
-            .map_err(|e| ErrorType::DatabaseError("Failed to insert TOTP secret".to_string(), e).res_rollback())
-    }
-    pub fn has_user_totp(conn: &mut DBConn, user_id: &u32) -> Result<bool, ErrorResponder> {
-        totp_secrets::table
-            .filter(totp_secrets::dsl::user_id.eq(user_id))
-            .select(totp_secrets::dsl::user_id)
-            .first::<u32>(conn)
-            .optional()
-            .map(|opt| opt.is_some())
-            .map_err(|e| ErrorType::DatabaseError("Failed to check if user has TOTP".to_string(), e).res_rollback())
-    }
-    pub fn get_user_totp_secrets(conn: &mut DBConn, user_id: &u32) -> Result<Vec<TOTPSecret>, ErrorResponder> {
-        totp_secrets::table
-            .filter(totp_secrets::dsl::user_id.eq(user_id))
-            .select(TOTPSecret::as_select())
-            .load::<TOTPSecret>(conn)
-            .map_err(|e| ErrorType::DatabaseError("Failed to get user TOTP secrets".to_string(), e).res_rollback())
-    }
-    pub fn check_user_totp(conn: &mut DBConn, user_id: &u32, code: &str) -> Result<bool, ErrorResponder> {
-        let secrets = TOTPSecret::get_user_totp_secrets(conn, user_id)?;
-        for secret in secrets {
-            if secret
-                .to_totp()?
-                .check_current(code)
-                .map_err(|_| ErrorType::InternalError("SystemTimeError occurred when checking TOTP.".to_string()).res())?
-            {
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
-
-    fn to_totp(&self) -> Result<TOTP, ErrorResponder> {
-        let rf6238 = Rfc6238::new(
-            6,
-            self.secret.clone(),
-            Some("Archypix".to_string()),
-            "clementgre@archypix.com".to_string(),
-        )
-        .map_err(|_| ErrorType::InternalError("Unable to create Rfc6238 (for TOTP)".to_string()).res())?;
-        TOTP::from_rfc6238(rf6238).map_err(|_| ErrorType::InternalError("Unable to create TOTP".to_string()).res())
     }
 }

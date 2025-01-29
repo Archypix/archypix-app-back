@@ -1,4 +1,4 @@
-use crate::database::picture::Picture;
+use crate::database::picture::picture::Picture;
 use crate::database::schema::PictureOrientation;
 use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive};
 use chrono::{Local, NaiveDateTime};

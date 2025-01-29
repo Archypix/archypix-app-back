@@ -1,5 +1,5 @@
 use crate::database::schema::UserStatus;
-use crate::database::user::User;
+use crate::database::user::user::User;
 use crate::utils::errors_catcher::ErrorResponder;
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;

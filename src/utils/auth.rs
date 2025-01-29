@@ -9,10 +9,10 @@ use rocket_okapi::okapi::openapi3::{Parameter, ParameterValue, SecurityRequireme
 use rocket_okapi::request::{OpenApiFromRequest, RequestHeaderInput};
 use user_agent_parser::{Device, Engine, OS};
 
-use crate::database::auth_token::AuthToken;
 use crate::database::database::DBPool;
 use crate::database::schema::*;
-use crate::database::user::User;
+use crate::database::user::auth_token::AuthToken;
+use crate::database::user::user::User;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 
 /// Request Guard for an authenticated user that is not banned nor unconfirmed.

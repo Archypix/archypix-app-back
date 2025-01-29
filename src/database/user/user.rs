@@ -1,11 +1,11 @@
-use crate::database::auth_token::{AuthToken, Confirmation};
 use crate::database::database::DBConn;
 use crate::database::schema::*;
+use crate::database::user::{auth_token::AuthToken, confirmation::Confirmation};
 use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use chrono::NaiveDateTime;
 use diesel::QueryDsl;
-use diesel::{insert_into, update, Associations, Identifiable, Insertable, OptionalExtension, Queryable, RunQueryDsl, Selectable};
+use diesel::{insert_into, update, Identifiable, Insertable, OptionalExtension, Queryable, RunQueryDsl, Selectable};
 use diesel::{ExpressionMethods, SelectableHelper};
 use pwhash::bcrypt;
 use rocket::Request;
@@ -23,15 +23,6 @@ pub struct User {
     pub tfa_login: bool,
     pub storage_count_ko: u64,
     pub storage_limit_mo: u32,
-}
-
-#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
-#[diesel(primary_key(user_id_1, user_id_2))]
-#[diesel(belongs_to(User, foreign_key = user_id_1, foreign_key = user_id_2))]
-#[diesel(table_name = friends)]
-pub struct Friends {
-    pub user_id_1: u32,
-    pub user_id_2: u32,
 }
 
 impl User {
@@ -121,5 +112,3 @@ impl User {
         request.headers().get_one("X-User-Id").map(|s| s.parse::<u32>().ok()).flatten()
     }
 }
-
-impl Friends {}

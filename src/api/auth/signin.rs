@@ -1,7 +1,7 @@
-use crate::database::auth_token::{AuthToken, Confirmation, TOTPSecret};
 use crate::database::database::{DBConn, DBPool};
 use crate::database::schema::{ConfirmationAction, UserStatus};
-use crate::database::user::User;
+use crate::database::user::user::User;
+use crate::database::user::{auth_token::AuthToken, confirmation::Confirmation, totp_secret::TOTPSecret};
 use crate::mailing::mailer::send_rendered_email;
 use crate::utils::auth::DeviceInfo;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
