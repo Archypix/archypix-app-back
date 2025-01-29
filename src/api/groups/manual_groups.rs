@@ -3,7 +3,7 @@ use crate::database::group::arrangement::Arrangement;
 use crate::database::group::group::Group;
 use crate::database::user::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
-use rocket::serde::{json::Json, Deserialize, Serialize};
+use rocket::serde::{json::Json, Deserialize};
 use rocket::State;
 use rocket_okapi::{openapi, JsonSchema};
 
@@ -74,8 +74,4 @@ pub async fn remove_pictures_from_group(db: &State<DBPool>, user: User, request:
         group.remove_pictures(conn, request.picture_ids.clone())?;
         Ok(())
     })
-}
-
-pub fn routes() -> Vec<rocket::Route> {
-    rocket::routes![create_manual_group, add_pictures_to_group, remove_pictures_from_group,]
 }

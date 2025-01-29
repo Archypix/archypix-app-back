@@ -1,7 +1,6 @@
 use crate::database::group::group::Group;
 use crate::database::picture::picture::Picture;
 use crate::database::schema::*;
-use diesel::prelude::*;
 use diesel::{Associations, Identifiable, Queryable, Selectable};
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]

@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::ftp_server::ftp_auth::PMUser;
@@ -15,34 +14,27 @@ pub struct Meta {
 }
 
 impl Vfs {
-    pub(crate) fn new() -> Vfs { Vfs {} }
+    pub(crate) fn new() -> Vfs {
+        Vfs {}
+    }
 }
 
 #[async_trait]
 impl StorageBackend<PMUser> for Vfs {
     type Metadata = Meta;
 
-    async fn metadata<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &PMUser,
-        path: P,
-    ) -> Result<Self::Metadata> {
+    async fn metadata<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, path: P) -> Result<Self::Metadata> {
         unimplemented!()
     }
 
     async fn md5<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, path: P) -> Result<String>
-        where
-            P: AsRef<Path> + Send + Debug,
+    where
+        P: AsRef<Path> + Send + Debug,
     {
         unimplemented!()
     }
 
-    async fn list<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &PMUser,
-        path: P,
-    ) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>>
-    {
+    async fn list<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, path: P) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>> {
         unimplemented!()
     }
 
@@ -55,10 +47,7 @@ impl StorageBackend<PMUser> for Vfs {
         unimplemented!()
     }
 
-    async fn put<
-        P: AsRef<Path> + Send + Debug,
-        R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static,
-    >(
+    async fn put<P: AsRef<Path> + Send + Debug, R: tokio::io::AsyncRead + Send + Sync + Unpin + 'static>(
         &self,
         user: &PMUser,
         input: R,
@@ -68,45 +57,23 @@ impl StorageBackend<PMUser> for Vfs {
         unimplemented!()
     }
 
-    async fn del<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &PMUser,
-        path: P,
-    ) -> Result<()> {
+    async fn del<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, path: P) -> Result<()> {
         unimplemented!()
     }
 
-    async fn mkd<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &PMUser,
-        path: P,
-    ) -> Result<()> {
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, path: P) -> Result<()> {
         unimplemented!()
     }
 
-    async fn rename<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &PMUser,
-        from: P,
-        to: P,
-    ) -> Result<()> {
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, from: P, to: P) -> Result<()> {
         unimplemented!()
     }
 
-
-    async fn rmd<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &PMUser,
-        path: P,
-    ) -> Result<()> {
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, path: P) -> Result<()> {
         unimplemented!()
     }
 
-    async fn cwd<P: AsRef<Path> + Send + Debug>(
-        &self,
-        user: &PMUser,
-        path: P,
-    ) -> Result<()> {
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, user: &PMUser, path: P) -> Result<()> {
         unimplemented!()
     }
 }

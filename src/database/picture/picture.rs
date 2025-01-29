@@ -10,7 +10,7 @@ use diesel::dsl::insert_into;
 use diesel::ExpressionMethods;
 use diesel::JoinOnDsl;
 use diesel::QueryDsl;
-use diesel::{select, Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
+use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
 use diesel_derives::Insertable;
 use rocket_okapi::JsonSchema;
 use serde::Serialize;

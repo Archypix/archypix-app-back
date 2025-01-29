@@ -5,8 +5,8 @@ use crate::utils::auth::DeviceInfo;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use crate::utils::utils::random_token;
 use chrono::{NaiveDateTime, TimeDelta, Utc};
+use diesel::delete;
 use diesel::ExpressionMethods;
-use diesel::{delete, QueryDsl};
 use diesel::{insert_into, update, Identifiable, Insertable, Queryable, RunQueryDsl, Selectable};
 use rocket::Request;
 

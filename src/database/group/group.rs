@@ -2,11 +2,9 @@ use crate::database::database::DBConn;
 use crate::database::group::arrangement::Arrangement;
 use crate::database::schema::*;
 use crate::database::utils::get_last_inserted_id;
-use crate::database::{picture::picture::Picture, user::user::User};
-use crate::grouping::grouping_strategy::GroupingStrategy;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
-use diesel::{select, Associations, Identifiable, QueryResult, Queryable, Selectable};
+use diesel::{Associations, Identifiable, Queryable, Selectable};
 use schemars::JsonSchema;
 use serde::Serialize;
 
