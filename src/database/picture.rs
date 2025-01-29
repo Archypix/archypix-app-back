@@ -2,6 +2,7 @@ use crate::database::database::DBConn;
 use crate::database::schema::PictureOrientation;
 use crate::database::schema::*;
 use crate::database::user::User;
+use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
@@ -115,9 +116,7 @@ impl Picture {
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res_rollback())?;
 
-        picture.id = select(last_insert_id())
-            .get_result::<u64>(conn)
-            .map_err(|e| ErrorType::DatabaseError("Failed to get last insert id".to_string(), e).res_rollback())?;
+        picture.id = get_last_inserted_id(conn)?;
 
         Ok(picture)
     }

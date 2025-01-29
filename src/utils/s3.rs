@@ -41,6 +41,9 @@ impl PictureStorer {
         let config = config_builder.build();
         let client = Client::from_conf(config);
 
+        // Test connection
+        client.list_buckets().send().await.expect("Unable to connect to S3");
+
         let picture_storer = PictureStorer { client };
         picture_storer.create_buckets().await;
         picture_storer

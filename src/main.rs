@@ -8,6 +8,10 @@ use crate::api::auth::confirm::{
 use crate::api::auth::signin::{auth_signin, auth_signin_email, okapi_add_operation_for_auth_signin_, okapi_add_operation_for_auth_signin_email_};
 use crate::api::auth::signup::{auth_signup, okapi_add_operation_for_auth_signup_};
 use crate::api::auth::status::{auth_status, okapi_add_operation_for_auth_status_};
+use crate::api::groups::manual_groups::{
+    add_pictures_to_group, create_manual_group, okapi_add_operation_for_add_pictures_to_group_, okapi_add_operation_for_create_manual_group_,
+    okapi_add_operation_for_remove_pictures_from_group_, remove_pictures_from_group,
+};
 use crate::api::picture::{add_picture, get_picture, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_};
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
@@ -30,6 +34,10 @@ mod api {
 
     pub mod admin {
         pub mod admin;
+    }
+
+    pub mod groups {
+        pub mod manual_groups;
     }
 
     pub mod auth {
@@ -78,6 +86,7 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 #[launch]
 #[tokio::main]
 async fn rocket() -> _ {
+    println!("Starting Archypix app backend...");
     dotenv().ok();
 
     // Migrate SQL database
@@ -106,7 +115,10 @@ async fn rocket() -> _ {
                 auth_confirm_code,
                 auth_confirm_token,
                 add_picture,
-                get_picture
+                get_picture,
+                create_manual_group,
+                add_pictures_to_group,
+                remove_pictures_from_group
             ],
         )
         .register("/", catchers![bad_request, unauthorized, not_found, unprocessable_entity, internal_error])

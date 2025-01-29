@@ -108,6 +108,9 @@ pub enum ErrorType {
     UnableToLoadExifMetadata(Rexiv2Error),
     S3Error(String),
     UnableToCreateThumbnail(String),
+    // Groups
+    GroupIsNotManual,
+    ArrangementNotFound,
 }
 
 impl ErrorType {
@@ -186,6 +189,12 @@ impl ErrorType {
             ErrorType::UnableToCreateThumbnail(msg) => {
                 ErrorResponder::InternalError(Self::create_response(format!("Unable to create thumbnail: {}", msg), kind, rollback))
             }
+            ErrorType::GroupIsNotManual => ErrorResponder::BadRequest(Self::create_response(
+                "You can’t manage pictures of a non-manual group.".to_string(),
+                kind,
+                rollback,
+            )),
+            ErrorType::ArrangementNotFound => ErrorResponder::NotFound(Self::create_response("Arrangement not found".to_string(), kind, rollback)),
         }
     }
     /// Converts to an [`ErrorResponse`] struct

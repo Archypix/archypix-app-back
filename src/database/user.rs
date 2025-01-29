@@ -1,10 +1,11 @@
 use crate::database::auth_token::{AuthToken, Confirmation};
 use crate::database::database::DBConn;
 use crate::database::schema::*;
+use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use chrono::NaiveDateTime;
 use diesel::QueryDsl;
-use diesel::{insert_into, select, update, Associations, Identifiable, Insertable, OptionalExtension, Queryable, RunQueryDsl, Selectable};
+use diesel::{insert_into, update, Associations, Identifiable, Insertable, OptionalExtension, Queryable, RunQueryDsl, Selectable};
 use diesel::{ExpressionMethods, SelectableHelper};
 use pwhash::bcrypt;
 use rocket::Request;
@@ -101,12 +102,7 @@ impl User {
             ))
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res_rollback())
-            .and_then(|_| {
-                select(last_insert_id())
-                    .get_result::<u64>(conn)
-                    .map(|id| id as u32)
-                    .map_err(|e| ErrorType::DatabaseError("Failed to get last insert id".to_string(), e).res_rollback())
-            })
+            .and_then(|_| get_last_inserted_id(conn).map(|id| id as u32))
     }
 
     pub fn switch_status(&self, conn: &mut DBConn, status: &UserStatus) -> Result<(), ErrorResponder> {
