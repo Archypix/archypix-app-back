@@ -1,3 +1,4 @@
+use crate::api::picture::ListPictureData;
 use crate::database::database::DBConn;
 use crate::database::schema::PictureOrientation;
 use crate::database::schema::*;
@@ -50,18 +51,23 @@ pub struct Picture {
 }
 
 impl Picture {
-    pub(crate) fn list_all(conn: &mut DBConn, user_id: u32, deleted: bool, shared: Option<bool>) -> Result<Vec<u64>, ErrorResponder> {
+    pub(crate) fn list_all(conn: &mut DBConn, user_id: u32, deleted: bool, shared: Option<bool>) -> Result<Vec<ListPictureData>, ErrorResponder> {
         let include_owned = !shared.unwrap_or(false);
         let include_shared = shared.unwrap_or(true);
 
-        let mut pictures: Vec<u64> = Vec::new();
+        let mut pictures: Vec<ListPictureData> = Vec::new();
 
         if include_owned {
             pictures = pictures::table
                 .filter(pictures::dsl::owner_id.eq(user_id))
                 .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
-                .select(pictures::dsl::id)
-                .load::<u64>(conn)
+                .select((pictures::dsl::id, pictures::dsl::name, pictures::dsl::width, pictures::dsl::height))
+                .load::<(u64, String, u16, u16)>(conn)
+                .map(|vec| {
+                    vec.into_iter()
+                        .map(|(id, name, width, height)| ListPictureData { id, name, width, height })
+                        .collect()
+                })
                 .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?;
         }
         if include_shared {
@@ -71,8 +77,13 @@ impl Picture {
                     .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
                     .filter(shared_groups::dsl::user_id.eq(user_id))
                     .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
-                    .select(pictures::dsl::id)
-                    .load::<u64>(conn)
+                    .select((pictures::dsl::id, pictures::dsl::name, pictures::dsl::width, pictures::dsl::height))
+                    .load::<(u64, String, u16, u16)>(conn)
+                    .map(|vec| {
+                        vec.into_iter()
+                            .map(|(id, name, width, height)| ListPictureData { id, name, width, height })
+                            .collect()
+                    })
                     .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?,
             );
         }

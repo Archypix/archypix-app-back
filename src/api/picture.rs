@@ -1,5 +1,6 @@
 use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::picture::Picture;
+use crate::database::schema::pictures::width;
 use crate::database::user::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorResponse, ErrorType};
 use crate::utils::s3::PictureStorer;
@@ -173,10 +174,18 @@ pub struct ListPicture {
     pub(crate) deleted: bool,
 }
 
+#[derive(JsonSchema, Serialize, Debug)]
+pub struct ListPictureData {
+    pub(crate) id: u64,
+    pub(crate) name: String,
+    pub(crate) width: u16,
+    pub(crate) height: u16,
+}
+
 /// List all pictures
 #[openapi(tag = "Picture")]
 #[get("/pictures?<deleted>")]
-pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Result<Json<Vec<u64>>, ErrorResponder> {
+pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Result<Json<Vec<ListPictureData>>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
     let pictures = Picture::list_all(conn, user.id, deleted, None)?;
     Ok(Json(pictures))
