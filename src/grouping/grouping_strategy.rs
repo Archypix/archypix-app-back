@@ -49,8 +49,8 @@ pub enum FilterType {
     All,
     IncludeTags(Vec<[u8; 16]>),
     ExcludeTags(Vec<[u8; 16]>),
-    IncludeSubgroups(Vec<[u8; 16]>),
-    ExcludeSubgroups(Vec<[u8; 16]>),
+    IncludeGroups(Vec<[u8; 16]>),
+    ExcludeGroups(Vec<[u8; 16]>),
     ExifEqualTo(ExifDataTypeValue),       // Equal to any of the values
     ExifNotEqualTo(ExifDataTypeValue),    // Not equal to all the values
     ExifInInterval(ExifDataTypeValue),    // Interval composed of two first values
@@ -68,24 +68,34 @@ pub enum GroupingType {
 }
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FilterGrouping {
-    filters: Vec<(GroupingFilterStrategy, u64)>, // Value is the id of the corresponding subgroup
+    filters: Vec<(GroupingFilterStrategy, u64)>, // Value is the id of the corresponding group
+    other_group_id: Option<u64>,                 // Id of the group for the pictures that do not match any filter
 }
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TagGrouping {
     tag_group_id: u64,
-    tag_id_to_subgroup_id: HashMap<u64, u64>,
-    subgroup_names_format: String,
+    tag_id_to_group_id: HashMap<u64, u64>,
+    others_group_id: Option<u64>,
+    group_names_format: String,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ExifValuesGrouping {
-    data_type: ExifDataTypeValue,    // data vec contains the values for each group
-    values_to_subgroup_id: Vec<u32>, // The value at index i is the id of the group for the value at index i in the data vec
-    subgroup_names_format: String,
+    data_type: ExifDataTypeValue, // data vec contains the values for each group
+    values_to_group_id: Vec<u32>, // The value at index i is the id of the group for the value at index i in the data vec
+    group_names_format: String,
+    other_group_id: Option<u32>,
 }
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ExifIntervalGrouping {
-    interval: ExifDataTypeValue,   // First value is origin, second is interval
-    subgroup_names_format: String, // Datetime format or number format.
+    /* ... | interval -2 | interval -1 |origin| interval 1 | interval 2 | ...
+     * ... | decreasing  | decreasing  |origin| increasing | increasing | ...
+     * ... | index 1     | index 0     |origin| index 0    | index 1    | ...
+     */
+    interval: ExifDataTypeValue,    // First value is origin, second is interval
+    group_ids_increasing: Vec<u32>, // ids of groups for intervals after the origin
+    group_ids_decreasing: Vec<u32>, // ids of groups for intervals before the origin (in reverse order)
+    other_group_id: Option<u32>,    // id of the group for the pictures that do not match any interval (if any)
+    group_names_format: String,     // Datetime format or number format.
 }
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct LocationGrouping {

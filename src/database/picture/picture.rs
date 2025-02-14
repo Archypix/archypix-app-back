@@ -7,11 +7,12 @@ use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
 use diesel::dsl::insert_into;
-use diesel::ExpressionMethods;
 use diesel::JoinOnDsl;
 use diesel::QueryDsl;
 use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
+use diesel::{BoolExpressionMethods, ExpressionMethods};
 use diesel_derives::Insertable;
+use rocket::serde::json::Json;
 use rocket_okapi::JsonSchema;
 use serde::Serialize;
 
@@ -49,7 +50,36 @@ pub struct Picture {
 }
 
 impl Picture {
-    /// Returns Unauthorized if the user is not the owner of the picture and the picture is not in a group shared with the user
+    pub(crate) fn list_all(conn: &mut DBConn, user_id: u32, deleted: bool, shared: Option<bool>) -> Result<Vec<u64>, ErrorResponder> {
+        let include_owned = !shared.unwrap_or(false);
+        let include_shared = shared.unwrap_or(true);
+
+        let mut pictures: Vec<u64> = Vec::new();
+
+        if include_owned {
+            pictures = pictures::table
+                .filter(pictures::dsl::owner_id.eq(user_id))
+                .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
+                .select(pictures::dsl::id)
+                .load::<u64>(conn)
+                .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?;
+        }
+        if include_shared {
+            pictures.append(
+                &mut pictures::table
+                    .inner_join(groups_pictures::table.on(groups_pictures::dsl::picture_id.eq(pictures::dsl::id)))
+                    .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
+                    .filter(shared_groups::dsl::user_id.eq(user_id))
+                    .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
+                    .select(pictures::dsl::id)
+                    .load::<u64>(conn)
+                    .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?,
+            );
+        }
+        Ok(pictures)
+    }
+
+    /// Returns Ok(true) if the user is the owner of the picture or the picture is in a group shared with the user
     pub(crate) fn can_user_access_picture(conn: &mut DBConn, picture_id: u64, user_id: u32) -> Result<bool, ErrorResponder> {
         let owned_count = pictures::table
             .filter(pictures::dsl::id.eq(picture_id))
@@ -64,8 +94,8 @@ impl Picture {
 
         let shared_count = groups_pictures::table
             .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
-            .filter(groups_pictures::dsl::picture_id.eq(picture_id))
             .filter(shared_groups::dsl::user_id.eq(user_id))
+            .filter(groups_pictures::dsl::picture_id.eq(picture_id))
             .count()
             .get_result::<i64>(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to get picture".to_string(), e).res())?;

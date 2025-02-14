@@ -69,7 +69,7 @@ pub async fn add_picture(
         }
         let path = upload.file.path().unwrap();
 
-        // EXIF metadata
+        // Read EXIF metadata
         let meta = rexiv2::Metadata::new_from_path(path).ok();
 
         // Database operations
@@ -78,7 +78,7 @@ pub async fn add_picture(
 
             // TODO: request to add the picture to its matching groups
 
-            // Saving the file
+            // Upload file to S3
             task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
                     picture_storer
@@ -141,11 +141,11 @@ impl OpenApiResponderInner for PictureStream {
 }
 
 /// Get a picture by its id
-/// If the user is logged in, the picture is only accessible if  owned by the user or in a shared group with the user,
+/// If the user is logged in, the picture is only accessible if owned by the user or in a shared group with the user,
 /// If the user is not logged in, the picture is only accessible if it is in a publicly shared group.
 /// Otherwise, Unauthorized is returned
 #[openapi(tag = "Picture")]
-#[get("/picture/<format>/<picture_id>")]
+#[get("/picture/<picture_id>/<format>")]
 pub async fn get_picture(
     db: &State<DBPool>,
     format: PictureThumbnail,
@@ -166,4 +166,18 @@ pub async fn get_picture(
 
     let picture_stream = picture_storer.get_picture(format, picture_id).await?;
     Ok(PictureStream { picture_id, picture_stream })
+}
+
+#[derive(FromForm, JsonSchema, Debug)]
+pub struct ListPicture {
+    pub(crate) deleted: bool,
+}
+
+/// List all pictures
+#[openapi(tag = "Picture")]
+#[get("/pictures?<deleted>")]
+pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Result<Json<Vec<u64>>, ErrorResponder> {
+    let conn: &mut DBConn = &mut db.get().unwrap();
+    let pictures = Picture::list_all(conn, user.id, deleted, None)?;
+    Ok(Json(pictures))
 }

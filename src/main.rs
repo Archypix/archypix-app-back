@@ -12,7 +12,10 @@ use crate::api::groups::manual_groups::{
     add_pictures_to_group, create_manual_group, okapi_add_operation_for_add_pictures_to_group_, okapi_add_operation_for_create_manual_group_,
     okapi_add_operation_for_remove_pictures_from_group_, remove_pictures_from_group,
 };
-use crate::api::picture::{add_picture, get_picture, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_};
+use crate::api::picture::{
+    add_picture, get_picture, list_pictures, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_,
+    okapi_add_operation_for_list_pictures_,
+};
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
 use crate::utils::s3::PictureStorer;
@@ -138,6 +141,7 @@ async fn rocket() -> _ {
                 auth_confirm_token,
                 add_picture,
                 get_picture,
+                list_pictures,
                 create_manual_group,
                 add_pictures_to_group,
                 remove_pictures_from_group
