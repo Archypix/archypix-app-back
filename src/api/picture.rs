@@ -32,7 +32,6 @@ pub struct UploadPictureResponse {
 
 #[derive(FromForm, Debug)]
 pub struct UploadPictureData<'r> {
-    pub(crate) name: String,
     pub(crate) file: TempFile<'r>,
 }
 
@@ -57,7 +56,7 @@ pub async fn add_picture(
     user: User,
 ) -> Result<Json<UploadPictureResponse>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
-    let file_name = upload.name.clone();
+    let file_name = upload.file.name().unwrap_or("unknown.jpg").to_string();
 
     let file_name_ascii = file_name.chars().filter(|c| c.is_ascii()).collect::<String>();
     let temp_file_name = format!("{}-{}", random::<u16>(), file_name_ascii);
