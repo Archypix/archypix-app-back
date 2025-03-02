@@ -14,7 +14,7 @@ use crate::api::groups::manual_groups::{
 };
 use crate::api::picture::{
     add_picture, get_picture, list_pictures, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_,
-    okapi_add_operation_for_list_pictures_,
+    okapi_add_operation_for_list_pictures_, okapi_add_operation_for_query_pictures_, query_pictures,
 };
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
@@ -34,6 +34,7 @@ use user_agent_parser::UserAgentParser;
 
 mod api {
     pub mod picture;
+    pub mod query_pictures;
 
     pub mod admin {
         pub mod admin;
@@ -141,6 +142,7 @@ async fn rocket() -> _ {
                 auth_confirm_token,
                 add_picture,
                 get_picture,
+                query_pictures,
                 list_pictures,
                 create_manual_group,
                 add_pictures_to_group,

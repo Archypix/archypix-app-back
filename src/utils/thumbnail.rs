@@ -13,6 +13,16 @@ pub enum PictureThumbnail {
     Medium = 2,
     Large = 3,
 }
+impl PictureThumbnail {
+    pub fn get_thumbnail_size(&self) -> Option<usize> {
+        match self {
+            PictureThumbnail::Original => None,
+            PictureThumbnail::Small => Some(100),
+            PictureThumbnail::Medium => Some(500),
+            PictureThumbnail::Large => Some(1000),
+        }
+    }
+}
 impl FromParam<'_> for PictureThumbnail {
     type Error = ErrorResponder;
     fn from_param(param: &str) -> Result<Self, Self::Error> {
@@ -36,8 +46,8 @@ pub fn create_temp_directories() {
         std::fs::create_dir_all(THUMBS_TEMP_DIR).expect("Unable to create temp directory");
     }
 }
-/// Generate a thumbnail from a source file and stores it in temp_dir/<thumbnail_type>/original_name.webp
 
+/// Generate a thumbnail from a source file and stores it in THUMBS_TEMP_DIR/source_file_name
 pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) -> Result<PathBuf, ErrorResponder> {
     // Initialize the Magick Wand environment
     magick_wand_genesis();
@@ -48,7 +58,11 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to read image")).res_err();
     }
 
-    let size = get_thumbnail_size(thumbnail_type);
+    let size = thumbnail_type.get_thumbnail_size();
+    if size.is_none() {
+        panic!("Thumbnail size can’t be None: \"Original\" thumbnail type should not be used to generate thumbnails");
+    }
+    let size = size.unwrap();
     wand.fit(size, size);
 
     if let Err(e) = wand.set_image_format("webp") {
@@ -65,14 +79,4 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
     }
 
     Ok(dest_file)
-}
-
-fn get_thumbnail_size(thumbnail_type: PictureThumbnail) -> usize {
-    match thumbnail_type {
-        PictureThumbnail::Original => None,
-        PictureThumbnail::Small => Some(100),
-        PictureThumbnail::Medium => Some(500),
-        PictureThumbnail::Large => Some(1000),
-    }
-    .expect("Invalid thumbnail type")
 }

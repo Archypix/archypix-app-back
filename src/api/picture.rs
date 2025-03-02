@@ -1,3 +1,4 @@
+use crate::api::query_pictures::{PictureFilter, PictureSort, PicturesQuery};
 use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::picture::Picture;
 use crate::database::schema::pictures::width;
@@ -115,7 +116,7 @@ pub async fn add_picture(
         }))
     };
 
-    // Cleaning up
+    // Cleaning up files
     let _ = std::fs::remove_file(Path::new(ORIGINAL_TEMP_DIR).join(temp_file_name.clone()));
     let _ = std::fs::remove_file(Path::new(THUMBS_TEMP_DIR).join(temp_file_name));
     res
@@ -125,7 +126,6 @@ pub struct PictureStream {
     picture_id: u64,
     picture_stream: ByteStream,
 }
-
 impl<'a> Responder<'a, 'a> for PictureStream {
     fn respond_to(self, _: &Request) -> response::Result<'a> {
         Response::build()
@@ -144,6 +144,7 @@ impl OpenApiResponderInner for PictureStream {
 /// If the user is logged in, the picture is only accessible if owned by the user or in a shared group with the user,
 /// If the user is not logged in, the picture is only accessible if it is in a publicly shared group.
 /// Otherwise, Unauthorized is returned
+/// TODO: Implement S3 secret URL or picture secret token and remove the access check from this endpoint.
 #[openapi(tag = "Picture")]
 #[get("/picture/<picture_id>/<format>")]
 pub async fn get_picture(
@@ -168,11 +169,6 @@ pub async fn get_picture(
     Ok(PictureStream { picture_id, picture_stream })
 }
 
-#[derive(FromForm, JsonSchema, Debug)]
-pub struct ListPicture {
-    pub(crate) deleted: bool,
-}
-
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct ListPictureData {
     pub(crate) id: u64,
@@ -181,11 +177,28 @@ pub struct ListPictureData {
     pub(crate) height: u16,
 }
 
+/// Query pictures using custom query filters and sorting parameters.
+/// Does not change any state, but using post to have a request body.
+#[openapi(tag = "Picture")]
+#[post("/pictures", data = "<query>")]
+pub async fn query_pictures(db: &State<DBPool>, user: User, query: Json<PicturesQuery>) -> Result<Json<Vec<ListPictureData>>, ErrorResponder> {
+    let conn: &mut DBConn = &mut db.get().unwrap();
+    let pictures = Picture::query(conn, user.id, query.into_inner())?;
+    Ok(Json(pictures))
+}
+
 /// List all pictures
 #[openapi(tag = "Picture")]
 #[get("/pictures?<deleted>")]
 pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Result<Json<Vec<ListPictureData>>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
-    let pictures = Picture::list_all(conn, user.id, deleted, None)?;
+
+    let query = PicturesQuery {
+        filters: vec![PictureFilter::Deleted { invert: !deleted }],
+        sorts: vec![PictureSort::CreationDate { ascend: true }],
+        page: 2,
+    };
+
+    let pictures = Picture::query(conn, user.id, query)?;
     Ok(Json(pictures))
 }

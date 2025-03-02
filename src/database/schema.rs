@@ -118,6 +118,10 @@ table! {
 }
 joinable!(tags -> tag_groups (tag_group_id));
 allow_tables_to_appear_in_same_query!(tags, tag_groups);
+allow_tables_to_appear_in_same_query!(tags, pictures);
+allow_tables_to_appear_in_same_query!(tags, groups);
+allow_tables_to_appear_in_same_query!(tags, groups_pictures);
+allow_tables_to_appear_in_same_query!(tags, shared_groups);
 
 #[derive(Debug, PartialEq, JsonSchema, diesel_derive_enum::DbEnum, Clone, Deserialize, Serialize)]
 pub enum PictureOrientation {
@@ -174,6 +178,9 @@ joinable!(pictures_tags -> pictures (picture_id));
 joinable!(pictures_tags -> tags (tag_id));
 allow_tables_to_appear_in_same_query!(pictures_tags, pictures);
 allow_tables_to_appear_in_same_query!(pictures_tags, tags);
+allow_tables_to_appear_in_same_query!(pictures_tags, groups_pictures);
+allow_tables_to_appear_in_same_query!(pictures_tags, shared_groups);
+allow_tables_to_appear_in_same_query!(pictures_tags, groups);
 
 table! {
     arrangements (id) {
@@ -197,6 +204,7 @@ table! {
 }
 joinable!(groups -> arrangements (arrangement_id));
 allow_tables_to_appear_in_same_query!(groups, arrangements);
+allow_tables_to_appear_in_same_query!(groups, pictures);
 
 table! {
     groups_pictures (group_id, picture_id) {
