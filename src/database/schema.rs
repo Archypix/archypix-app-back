@@ -188,7 +188,10 @@ table! {
         user_id -> Unsigned<Integer>,
         name -> Varchar,
         strong_match_conversion -> Bool,
-        strategy -> Blob,
+        strategy -> Nullable<Blob>,
+        groups_dependant -> Bool,
+        tags_dependant -> Bool,
+        exif_dependant -> Bool,
     }
 }
 joinable!(arrangements -> users (user_id));

@@ -127,7 +127,10 @@ CREATE TABLE arrangements
     user_id                 INT UNSIGNED                NOT NULL,
     name                    VARCHAR(32)                 NOT NULL,
     strong_match_conversion BOOLEAN                     NOT NULL DEFAULT FALSE,
-    strategy                BLOB                        NOT NULL,
+    strategy         BLOB COMMENT 'Null if manual grouping',
+    groups_dependant BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'True if the strategy filters or groups in function of the pictures other’s groups presence',
+    tags_dependant   BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'True if the strategy filters or groups in function of the pictures tags',
+    exif_dependant   BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'True if the strategy filters or groups in function of the pictures exif',
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

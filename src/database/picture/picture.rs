@@ -121,7 +121,6 @@ impl Picture {
             .into_boxed();
 
         // Applying filters
-
         for filter in query.filters {
             dsl_query = match filter.clone() {
                 PictureFilter::Owned { invert } => {
@@ -164,7 +163,6 @@ impl Picture {
         }
 
         // Applying sorting
-
         for sort in query.sorts {
             dsl_query = match sort {
                 PictureSort::CreationDate { ascend } => {
@@ -185,12 +183,12 @@ impl Picture {
         }
 
         // Applying pagination
-
         dsl_query = dsl_query.limit(page_size as i64).offset(((query.page - 1) * page_size) as i64);
 
         // Fetching the pictures
         let pictures: Vec<ListPictureData> = dsl_query
             .select((pictures::dsl::id, pictures::dsl::name, pictures::dsl::width, pictures::dsl::height))
+            .distinct()
             .load::<(u64, String, u16, u16)>(conn)
             .map(|vec| {
                 vec.into_iter()

@@ -29,7 +29,7 @@ pub async fn create_manual_group(db: &State<DBPool>, user: User, request: Json<C
     err_transaction(&mut conn, |conn| {
         // Verify the arrangement is manual and owned by the user
         let arrangement = Arrangement::from_id_and_user_id(conn, request.arrangement_id, user.id)?;
-        if !arrangement.get_strategy()?.is_manual() {
+        if arrangement.strategy.is_some() {
             return Err(ErrorType::GroupIsNotManual.res());
         }
 
@@ -47,7 +47,7 @@ pub async fn add_pictures_to_group(db: &State<DBPool>, user: User, request: Json
     err_transaction(&mut conn, |conn| {
         // Verify the arrangement is manual and owned by the user
         let arrangement = Arrangement::from_id_and_user_id(conn, request.arrangement_id, user.id)?;
-        if !arrangement.get_strategy()?.is_manual() {
+        if arrangement.strategy.is_some() {
             return Err(ErrorType::GroupIsNotManual.res());
         }
         // Get the group and verify it belongs to the arrangement
@@ -66,7 +66,7 @@ pub async fn remove_pictures_from_group(db: &State<DBPool>, user: User, request:
     err_transaction(&mut conn, |conn| {
         // Verify the arrangement is manual and owned by the user
         let arrangement = Arrangement::from_id_and_user_id(conn, request.arrangement_id, user.id)?;
-        if !arrangement.get_strategy()?.is_manual() {
+        if arrangement.strategy.is_some() {
             return Err(ErrorType::GroupIsNotManual.res());
         }
         // Get the group and verify it belongs to the arrangement

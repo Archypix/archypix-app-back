@@ -16,7 +16,10 @@ pub struct Arrangement {
     pub user_id: u32,
     pub name: String,
     pub strong_match_conversion: bool,
-    pub strategy: Vec<u8>,
+    pub strategy: Option<Vec<u8>>,
+    pub groups_dependant: bool,
+    pub tags_dependant: bool,
+    pub exif_dependant: bool,
 }
 
 impl Arrangement {
@@ -34,7 +37,10 @@ impl Arrangement {
             user_id,
             name,
             strong_match_conversion,
-            strategy: strategy_bytes,
+            strategy: Some(strategy_bytes),
+            groups_dependant: strategy.is_groups_dependant(),
+            tags_dependant: strategy.is_tags_dependant(),
+            exif_dependant: strategy.is_exif_dependant(),
         };
 
         let _ = diesel::insert_into(arrangements::table)
@@ -61,8 +67,12 @@ impl Arrangement {
             .optional()
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-
-    pub fn get_strategy(&self) -> Result<GroupingStrategy, ErrorResponder> {
-        serde_json::from_slice(&self.strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())
+    pub fn get_strategy(&self) -> Result<Option<GroupingStrategy>, ErrorResponder> {
+        if let Some(strategy) = &self.strategy {
+            return Ok(Some(
+                serde_json::from_slice(strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?,
+            ));
+        }
+        Ok(None)
     }
 }
