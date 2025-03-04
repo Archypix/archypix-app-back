@@ -1,15 +1,15 @@
 use crate::database::database::DBConn;
 use crate::database::group::group::Group;
 use crate::database::tag::tag::Tag;
-use crate::grouping::grouping_filter_strategy::GroupingFilterStrategy;
-use crate::grouping::grouping_strategy::ExifDataTypeValue;
+use crate::grouping::arrangement_strategy::ExifDataTypeValue;
+use crate::grouping::strategy_filtering::StrategyFiltering;
 use crate::utils::errors_catcher::ErrorResponder;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub enum GroupingType {
+pub enum StrategyGrouping {
     GroupByFilter(FilterGrouping),
     GroupByTags(TagGrouping),
     GroupByExifValues(ExifValuesGrouping),
@@ -17,38 +17,38 @@ pub enum GroupingType {
     GroupByLocation(LocationGrouping),
 }
 
-impl GroupingType {
+impl StrategyGrouping {
     pub fn get_groups(&self) -> Vec<u32> {
         match self {
-            GroupingType::GroupByFilter(f) => {
+            StrategyGrouping::GroupByFilter(f) => {
                 let mut groups: Vec<u32> = f.filters.iter().map(|(_, id)| *id).collect();
                 if let Some(id) = f.other_group_id {
                     (&mut groups).push(id);
                 }
                 groups
             }
-            GroupingType::GroupByTags(t) => {
+            StrategyGrouping::GroupByTags(t) => {
                 let mut groups: Vec<u32> = t.tag_id_to_group_id.values().cloned().collect();
                 if let Some(id) = t.other_group_id {
                     (&mut groups).push(id);
                 }
                 groups
             }
-            GroupingType::GroupByExifValues(e) => e.values_to_group_id.clone(),
-            GroupingType::GroupByExifInterval(e) => {
+            StrategyGrouping::GroupByExifValues(e) => e.values_to_group_id.clone(),
+            StrategyGrouping::GroupByExifInterval(e) => {
                 let mut groups: Vec<u32> = e.group_ids_decreasing.clone();
                 groups.append(&mut e.group_ids_increasing.clone());
                 groups
             }
-            GroupingType::GroupByLocation(l) => l.clusters_ids.clone(),
+            StrategyGrouping::GroupByLocation(l) => l.clusters_ids.clone(),
         }
     }
-    pub fn get_dependant_arrangements(&self) -> HashSet<u32> {
-        let mut set = HashSet::new();
+    pub fn get_dependant_groups(&self) -> Vec<u32> {
+        let mut set = Vec::new();
         match self {
-            GroupingType::GroupByFilter(f) => {
+            StrategyGrouping::GroupByFilter(f) => {
                 for (filter, _) in &f.filters {
-                    set.extend(filter.get_dependant_arrangements());
+                    set.extend(filter.get_dependant_groups());
                 }
             }
             _ => {}
@@ -57,21 +57,21 @@ impl GroupingType {
     }
     pub(crate) fn is_groups_dependant(&self) -> bool {
         match self {
-            GroupingType::GroupByFilter(f) => f.is_groups_dependant(),
+            StrategyGrouping::GroupByFilter(f) => f.is_groups_dependant(),
             _ => false,
         }
     }
     pub(crate) fn is_tags_dependant(&self) -> bool {
         match self {
-            GroupingType::GroupByFilter(f) => f.is_tags_dependant(),
-            GroupingType::GroupByTags(_) => true,
+            StrategyGrouping::GroupByFilter(f) => f.is_tags_dependant(),
+            StrategyGrouping::GroupByTags(_) => true,
             _ => false,
         }
     }
     pub(crate) fn is_exif_dependant(&self) -> bool {
         match self {
-            GroupingType::GroupByFilter(f) => f.is_exif_dependant(),
-            GroupingType::GroupByExifValues(_) | GroupingType::GroupByExifInterval(_) | GroupingType::GroupByLocation(_) => true,
+            StrategyGrouping::GroupByFilter(f) => f.is_exif_dependant(),
+            StrategyGrouping::GroupByExifValues(_) | StrategyGrouping::GroupByExifInterval(_) | StrategyGrouping::GroupByLocation(_) => true,
             _ => false,
         }
     }
@@ -79,8 +79,8 @@ impl GroupingType {
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FilterGrouping {
-    pub filters: Vec<(GroupingFilterStrategy, u32)>, // Value is the id of the corresponding group
-    pub other_group_id: Option<u32>,                 // Id of the group for the pictures that do not match any filter
+    pub filters: Vec<(StrategyFiltering, u32)>, // Value is the id of the corresponding group
+    pub other_group_id: Option<u32>,            // Id of the group for the pictures that do not match any filter
 }
 impl FilterGrouping {
     pub fn get_or_create_other_group_id(&mut self, conn: &mut DBConn, arrangement_id: u32) -> Result<(u32, bool), ErrorResponder> {

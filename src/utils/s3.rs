@@ -59,9 +59,9 @@ impl PictureStorer {
         for bucket_name in BUCKETS.iter() {
             if !existing_bucket_names.contains(&bucket_name.to_string()) {
                 let create_bucket_output = self.client.create_bucket().bucket(bucket_name.to_string()).send().await.unwrap();
-                println!("Created bucket: {:?}", create_bucket_output);
+                info!("Created bucket: {:?}", create_bucket_output);
             } else {
-                println!("Bucket '{}' already exists.", bucket_name);
+                info!("Bucket '{}' already exists.", bucket_name);
             }
         }
     }

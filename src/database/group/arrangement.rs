@@ -2,7 +2,7 @@ use crate::database::database::DBConn;
 use crate::database::schema::*;
 use crate::database::user::user::User;
 use crate::database::utils::get_last_inserted_id;
-use crate::grouping::grouping_strategy::GroupingStrategy;
+use crate::grouping::arrangement_strategy::ArrangementStrategy;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
 use diesel::{Associations, Identifiable, Queryable, Selectable};
@@ -28,7 +28,7 @@ impl Arrangement {
         user_id: u32,
         name: String,
         strong_match_conversion: bool,
-        strategy: GroupingStrategy,
+        strategy: ArrangementStrategy,
     ) -> Result<Arrangement, ErrorResponder> {
         let strategy_bytes = serde_json::to_vec(&strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?;
 
@@ -50,14 +50,14 @@ impl Arrangement {
                 arrangements::strong_match_conversion.eq(&arrangement.strong_match_conversion),
             ))
             .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())?;
 
         arrangement.id = get_last_inserted_id(conn)? as u32;
         Ok(arrangement)
     }
 
     pub fn from_id_and_user_id(conn: &mut DBConn, arrangement_id: u32, user_id: u32) -> Result<Arrangement, ErrorResponder> {
-        Self::from_id_and_user_id_opt(conn, arrangement_id, user_id)?.ok_or_else(|| ErrorType::ArrangementNotFound.res())
+        Self::from_id_and_user_id_opt(conn, arrangement_id, user_id)?.ok_or_else(|| ErrorType::ArrangementNotFound.res_rollback())
     }
     pub fn from_id_and_user_id_opt(conn: &mut DBConn, arrangement_id: u32, user_id: u32) -> Result<Option<Arrangement>, ErrorResponder> {
         arrangements::table
@@ -65,25 +65,25 @@ impl Arrangement {
             .filter(arrangements::user_id.eq(user_id))
             .first(conn)
             .optional()
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())
     }
     /// Deserialize the strategy and return it
-    pub fn get_strategy(&self) -> Result<Option<GroupingStrategy>, ErrorResponder> {
+    pub fn get_strategy(&self) -> Result<Option<ArrangementStrategy>, ErrorResponder> {
         if let Some(strategy) = &self.strategy {
             return Ok(Some(
-                serde_json::from_slice(strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?,
+                serde_json::from_slice(strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res_rollback())?,
             ));
         }
         Ok(None)
     }
     /// Updates the strategy of this arrangement
-    pub fn set_strategy(&mut self, conn: &mut DBConn, strategy: GroupingStrategy) -> Result<(), ErrorResponder> {
+    pub fn set_strategy(&mut self, conn: &mut DBConn, strategy: ArrangementStrategy) -> Result<(), ErrorResponder> {
         self.strategy = Some(serde_json::to_vec(&strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?);
 
         diesel::update(arrangements::table.filter(arrangements::id.eq(self.id)))
             .set(arrangements::strategy.eq(&self.strategy))
             .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())?;
         Ok(())
     }
 
@@ -92,7 +92,7 @@ impl Arrangement {
         arrangements::table
             .filter(arrangements::user_id.eq(user_id))
             .load(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())
     }
     /// List all users’ non-manual arrangements, providing the deserialized strategy and the list of groups
     pub fn list_arrangements_and_groups(conn: &mut DBConn, user_id: u32) -> Result<Vec<ArrangementDetails>, ErrorResponder> {
@@ -102,7 +102,7 @@ impl Arrangement {
             .map(|arrangement| {
                 let strategy = arrangement.get_strategy()?.unwrap();
                 let groups = strategy.groupings.get_groups();
-                let dependant_arrangements = strategy.get_dependant_arrangements();
+                let dependant_arrangements = strategy.get_dependant_arrangements(conn)?;
                 Ok(ArrangementDetails {
                     arrangement,
                     strategy,
@@ -112,11 +112,20 @@ impl Arrangement {
             })
             .collect()
     }
+    /// Get all arrangements containing at least one of the provided groups
+    pub fn get_arrangements_from_groups_ids(conn: &mut DBConn, groups_ids: Vec<u32>) -> Result<Vec<Arrangement>, ErrorResponder> {
+        Ok(arrangements::table
+            .inner_join(groups::table.on(groups::arrangement_id.eq(arrangements::id)))
+            .filter(groups::id.eq_any(groups_ids))
+            .select(arrangements::all_columns)
+            .load::<Arrangement>(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())?)
+    }
 }
 #[derive(Clone)]
 pub struct ArrangementDetails {
     pub arrangement: Arrangement,
-    pub strategy: GroupingStrategy,
+    pub strategy: ArrangementStrategy,
     pub dependant_arrangements: Vec<u32>,
     pub groups: Vec<u32>,
 }

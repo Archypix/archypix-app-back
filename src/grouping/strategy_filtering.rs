@@ -4,7 +4,7 @@ use crate::database::picture::picture::Picture;
 use crate::database::schema::pictures::dsl::pictures;
 use crate::database::schema::*;
 use crate::database::schema::{groups_pictures, pictures_tags, PictureOrientation};
-use crate::grouping::grouping_strategy::ExifDataTypeValue;
+use crate::grouping::arrangement_strategy::ExifDataTypeValue;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
@@ -20,11 +20,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct GroupingFilterStrategy {
+pub struct StrategyFiltering {
     pub filters: Vec<Vec<FilterType>>, // Filters are stored as a list of filters to apply in disjunctive normal form.
 }
 
-impl GroupingFilterStrategy {
+impl StrategyFiltering {
     pub fn filter_pictures(&self, conn: &mut DBConn, picture_ids: &Vec<u64>) -> Result<Vec<u64>, ErrorResponder> {
         use crate::database::schema::*;
         let mut req = pictures::table.filter(pictures::id.eq_any(picture_ids)).into_boxed();
@@ -57,8 +57,8 @@ impl GroupingFilterStrategy {
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn get_dependant_arrangements(&self) -> HashSet<u32> {
-        let mut dependant_arrangements = HashSet::new();
+    pub fn get_dependant_groups(&self) -> Vec<u32> {
+        let mut dependant_arrangements = Vec::new();
         for filters in self.filters.iter() {
             for filter in filters.iter() {
                 match filter {

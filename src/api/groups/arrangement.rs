@@ -3,7 +3,7 @@ use crate::database::database::DBPool;
 use crate::database::group::arrangement::Arrangement;
 use crate::database::group::group::Group;
 use crate::database::user::user::User;
-use crate::grouping::grouping_strategy::GroupingStrategy;
+use crate::grouping::arrangement_strategy::ArrangementStrategy;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ use rocket_okapi::{openapi, JsonSchema};
 pub struct CreateArrangementRequest {
     strong_match_conversion: bool,
     name: String,
-    strategy: GroupingStrategy,
+    strategy: ArrangementStrategy,
 }
 #[derive(Serialize, JsonSchema)]
 pub struct CreateArrangementResponse {

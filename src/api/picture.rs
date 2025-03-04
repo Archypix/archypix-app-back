@@ -67,7 +67,7 @@ pub async fn add_picture(
     let res = {
         // Saving the file
         if let Err(e) = upload.file.persist_to(Path::new(ORIGINAL_TEMP_DIR).join(temp_file_name.clone())).await {
-            println!("{:?}", e);
+            error!("{:?}", e);
             return ErrorType::InternalError(format!("Unable to save file to {}", ORIGINAL_TEMP_DIR)).res_err();
         }
         let path = upload.file.path().unwrap();
@@ -181,16 +181,6 @@ pub struct ListPictureData {
     pub(crate) height: u16,
     pub(crate) creation_date: NaiveDateTime,
     pub(crate) edition_date: NaiveDateTime,
-}
-
-/// Query pictures using custom query filters and sorting parameters.
-/// Does not change any state, but using post to have a request body.
-#[openapi(tag = "Picture")]
-#[post("/pictures", data = "<query>")]
-pub async fn query_pictures(db: &State<DBPool>, user: User, query: Json<PicturesQuery>) -> Result<Json<Vec<ListPictureData>>, ErrorResponder> {
-    let conn: &mut DBConn = &mut db.get().unwrap();
-    let pictures = Picture::query(conn, user.id, query.into_inner())?;
-    Ok(Json(pictures))
 }
 
 /// List all pictures

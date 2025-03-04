@@ -57,7 +57,7 @@ impl Confirmation {
                 if (is_error_duplicate_key(&e, "confirmations.PRIMARY") || is_error_duplicate_key(&e, "confirmations.UQ_confirmations"))
                     && try_count < 3
                 {
-                    println!("Confirmation token already exists, trying again.");
+                    warn!("Confirmation token already exists, trying again.");
                     return Confirmation::insert_confirmation(conn, user_id, action, device_info, redirect_url, try_count + 1);
                 }
                 ErrorType::DatabaseError("Failed to insert confirmation".to_string(), e).res_err_rollback()

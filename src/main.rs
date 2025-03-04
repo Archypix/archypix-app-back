@@ -14,8 +14,10 @@ use crate::api::groups::manual_groups::{
 };
 use crate::api::picture::{
     add_picture, get_picture, list_pictures, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_,
-    okapi_add_operation_for_list_pictures_, okapi_add_operation_for_query_pictures_, query_pictures,
+    okapi_add_operation_for_list_pictures_,
 };
+use crate::api::query_pictures::{okapi_add_operation_for_query_pictures_, query_pictures};
+use crate::api::tags::{get_tags, new_tag_group, okapi_add_operation_for_get_tags_, okapi_add_operation_for_new_tag_group_};
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
 use crate::utils::s3::PictureStorer;
@@ -24,6 +26,7 @@ use crate::utils::utils::{get_backend_host, get_frontend_host};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
 use rocket::http::Method;
+use rocket::log::private::LevelFilter;
 use rocket_cors::{AllowedHeaders, AllowedOrigins, Cors, CorsOptions};
 use rocket_okapi::openapi_get_routes;
 use rocket_okapi::rapidoc::{make_rapidoc, GeneralConfig, HideShowConfig, RapiDocConfig};
@@ -33,7 +36,7 @@ use std::env;
 use user_agent_parser::UserAgentParser;
 
 pub mod api {
-    automod::dir!(pub "src/api");
+    automod::dir!(pub "src/api/");
     pub mod admin {
         automod::dir!(pub "src/api/admin");
     }
@@ -63,7 +66,7 @@ pub mod database {
     }
 }
 pub mod grouping {
-    automod::dir!(pub "src/grouping/");
+    automod::dir!(pub "src/grouping");
 }
 pub mod mailing {
     automod::dir!(pub "src/mailing");
@@ -78,13 +81,15 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 #[launch]
 #[tokio::main]
 async fn rocket() -> _ {
-    println!("Starting Archypix app backend...");
+    env_logger::Builder::new().filter(None, LevelFilter::Debug).init();
+
+    info!("Starting Archypix app backend...");
     dotenv().ok();
 
     // Migrate SQL database
     let mut conn = get_connection();
     let res = conn.run_pending_migrations(MIGRATIONS).unwrap();
-    println!("Migrations result: {:?}", res);
+    info!("Migrations result: {:?}", res);
 
     // Load S3 Client
     let picture_storer = PictureStorer::new().await;
@@ -100,16 +105,22 @@ async fn rocket() -> _ {
         .mount(
             "/",
             openapi_get_routes![
+                // Auth
                 auth_signup,
                 auth_signin,
                 auth_signin_email,
                 auth_status,
                 auth_confirm_code,
                 auth_confirm_token,
+                // Picture
                 add_picture,
                 get_picture,
                 query_pictures,
                 list_pictures,
+                // Tags
+                get_tags,
+                new_tag_group,
+                // Groups
                 create_manual_group,
                 add_pictures_to_group,
                 remove_pictures_from_group

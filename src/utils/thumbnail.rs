@@ -54,7 +54,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
 
     let mut wand = MagickWand::new();
     if let Err(e) = wand.read_image(source_file.to_str().unwrap()) {
-        println!("{:?}", e);
+        warn!("{:?}", e);
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to read image")).res_err();
     }
 
@@ -66,7 +66,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
     wand.fit(size, size);
 
     if let Err(e) = wand.set_image_format("webp") {
-        println!("{:?}", e);
+        warn!("{:?}", e);
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to set image format")).res_err();
     }
 
@@ -74,7 +74,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
     let dest_file_path = dest_file.to_str().unwrap();
 
     if let Err(e) = wand.write_image(dest_file_path) {
-        println!("{:?}", e);
+        warn!("{:?}", e);
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to write image")).res_err();
     }
 

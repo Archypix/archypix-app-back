@@ -43,7 +43,7 @@ impl AuthToken {
             .map(|_| auth_token)
             .or_else(|e| {
                 if is_error_duplicate_key(&e, "auth_tokens.PRIMARY") && try_count < 4 {
-                    println!("Auth token already exists, trying again.");
+                    warn!("Auth token already exists, trying again.");
                     return AuthToken::insert_token_for_user(conn, user_id, device_info, try_count + 1);
                 }
                 ErrorType::DatabaseError("Failed to insert auth token".to_string(), e).res_err_rollback()
@@ -53,7 +53,7 @@ impl AuthToken {
         // Working in UTC time.
         let current_naive = Utc::now().naive_utc();
         if current_naive - self.last_use_date > TimeDelta::try_minutes(10).unwrap() {
-            println!("Updating last_use_date of auth_token for user {}", self.user_id);
+            info!("Updating last_use_date of auth_token for user {}", self.user_id);
             update(auth_tokens::table)
                 .filter(auth_tokens::dsl::user_id.eq(self.user_id))
                 .filter(auth_tokens::dsl::token.eq(self.token.clone()))

@@ -15,7 +15,7 @@ lazy_static! {
         let mut tera = match Tera::new("src/mailing/templates/**/*") {
             Ok(t) => t,
             Err(e) => {
-                println!("Parsing error(s): {}", e);
+                error!("Parsing error(s): {}", e);
                 ::std::process::exit(1);
             }
         };
@@ -74,7 +74,7 @@ async fn send_email_async(to: (String, String), subject: String, body_text: Stri
         .build();
 
     match mailer.send(email).await {
-        Ok(_) => println!("Email successfully sent to: {} <{}>", to.0, to.1),
-        Err(e) => panic!("Could not send email: {e:?}"),
+        Ok(_) => info!("Email successfully sent to: {} <{}>", to.0, to.1),
+        Err(e) => error!("Could not send email: {e:?}"),
     }
 }

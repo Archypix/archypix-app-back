@@ -121,7 +121,7 @@ fn rational_to_big_decimal(rational: Option<Ratio<i32>>, decimals: i64) -> Optio
 fn extract_first_tag(metadata: &Metadata, tags: &[&str]) -> Option<String> {
     for tag in tags {
         if let Some(value) = metadata.get_tag_string(tag).ok() {
-            println!("Found valid tag `{}` with value `{}`", tag, value);
+            info!("Found valid tag `{}` with value `{}`", tag, value);
             return Some(value);
         }
     }

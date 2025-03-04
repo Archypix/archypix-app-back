@@ -3,7 +3,7 @@ use crate::database::group::arrangement::{Arrangement, ArrangementDetails};
 use crate::database::group::group::Group;
 use crate::database::picture::picture_tag::PictureTag;
 use crate::database::tag::tag::Tag;
-use crate::grouping::grouping_type::GroupingType;
+use crate::grouping::strategy_grouping::StrategyGrouping;
 use crate::utils::errors_catcher::ErrorResponder;
 use std::collections::{HashMap, HashSet};
 
@@ -16,14 +16,14 @@ pub fn group_new_pictures(conn: &mut DBConn, user_id: u32, pictures: Vec<u64>) -
 
     for mut arrangement in arrangements {
         // Keep only pictures that match this arrangement
-        println!("Processing arrangement: {:?}", arrangement.arrangement.id);
+        info!("Processing arrangement: {:?}", arrangement.arrangement.id);
         let pictures_ids = arrangement.strategy.filter.filter_pictures(conn, &pictures)?;
 
         // Add pictures to groups
 
         let mut update_strategy = false;
         match &mut arrangement.strategy.groupings {
-            GroupingType::GroupByFilter(filter_grouping) => {
+            StrategyGrouping::GroupByFilter(filter_grouping) => {
                 let mut remaining_pictures_ids = pictures_ids.clone();
                 for (filter, group_id) in &filter_grouping.filters {
                     let pictures_to_group = if arrangement.strategy.preserve_unicity {
@@ -41,7 +41,7 @@ pub fn group_new_pictures(conn: &mut DBConn, user_id: u32, pictures: Vec<u64>) -
                     Group::add_pictures(conn, other_group_id, remaining_pictures_ids)?;
                 }
             }
-            GroupingType::GroupByTags(tag_grouping) => {
+            StrategyGrouping::GroupByTags(tag_grouping) => {
                 let mut remaining_pictures_ids = pictures_ids.clone();
                 let tags = Tag::list_tags(conn, user_id)?;
                 // TODO: Fetch all tags of the group,
@@ -68,9 +68,9 @@ pub fn group_new_pictures(conn: &mut DBConn, user_id: u32, pictures: Vec<u64>) -
                     Group::add_pictures(conn, other_group_id, remaining_pictures_ids)?;
                 }
             }
-            GroupingType::GroupByExifValues(e) => {}
-            GroupingType::GroupByExifInterval(e) => {}
-            GroupingType::GroupByLocation(l) => {}
+            StrategyGrouping::GroupByExifValues(e) => {}
+            StrategyGrouping::GroupByExifInterval(e) => {}
+            StrategyGrouping::GroupByLocation(l) => {}
         }
 
         if update_strategy {
@@ -104,7 +104,7 @@ pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<Arrang
     ) -> Result<(), String> {
         // Detect a cycle
         if temp_stack.contains(&node_id) {
-            println!("Cycle detected in dependency graph");
+            info!("Cycle detected in dependency graph");
             return Err("Cycle detected in dependency graph".to_string());
         }
         if visited.contains(&node_id) {
