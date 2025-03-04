@@ -7,7 +7,7 @@ use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
 use diesel::{Associations, Identifiable, Queryable, Selectable};
 
-#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
+#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq, Clone)]
 #[diesel(primary_key(id))]
 #[diesel(belongs_to(User))]
 #[diesel(table_name = arrangements)]
@@ -67,6 +67,7 @@ impl Arrangement {
             .optional()
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
+    /// Deserialize the strategy and return it
     pub fn get_strategy(&self) -> Result<Option<GroupingStrategy>, ErrorResponder> {
         if let Some(strategy) = &self.strategy {
             return Ok(Some(
@@ -75,4 +76,47 @@ impl Arrangement {
         }
         Ok(None)
     }
+    /// Updates the strategy of this arrangement
+    pub fn set_strategy(&mut self, conn: &mut DBConn, strategy: GroupingStrategy) -> Result<(), ErrorResponder> {
+        self.strategy = Some(serde_json::to_vec(&strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?);
+
+        diesel::update(arrangements::table.filter(arrangements::id.eq(self.id)))
+            .set(arrangements::strategy.eq(&self.strategy))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+        Ok(())
+    }
+
+    /// List all user’s arrangements
+    pub fn list_arrangements(conn: &mut DBConn, user_id: u32) -> Result<Vec<Arrangement>, ErrorResponder> {
+        arrangements::table
+            .filter(arrangements::user_id.eq(user_id))
+            .load(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    /// List all users’ non-manual arrangements, providing the deserialized strategy and the list of groups
+    pub fn list_arrangements_and_groups(conn: &mut DBConn, user_id: u32) -> Result<Vec<ArrangementDetails>, ErrorResponder> {
+        Self::list_arrangements(conn, user_id)?
+            .into_iter()
+            .filter(|arrangement| arrangement.strategy.is_some())
+            .map(|arrangement| {
+                let strategy = arrangement.get_strategy()?.unwrap();
+                let groups = strategy.groupings.get_groups();
+                let dependant_arrangements = strategy.get_dependant_arrangements();
+                Ok(ArrangementDetails {
+                    arrangement,
+                    strategy,
+                    dependant_arrangements,
+                    groups,
+                })
+            })
+            .collect()
+    }
+}
+#[derive(Clone)]
+pub struct ArrangementDetails {
+    pub arrangement: Arrangement,
+    pub strategy: GroupingStrategy,
+    pub dependant_arrangements: Vec<u32>,
+    pub groups: Vec<u32>,
 }

@@ -6,9 +6,9 @@ use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
 use diesel::{Associations, Identifiable, Queryable, Selectable};
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq, Serialize, JsonSchema)]
+#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
 #[diesel(primary_key(id))]
 #[diesel(belongs_to(Arrangement))]
 #[diesel(table_name = groups)]
@@ -59,10 +59,10 @@ impl Group {
         self.arrangement_id
     }
 
-    pub fn add_pictures(&self, conn: &mut DBConn, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+    pub fn add_pictures(conn: &mut DBConn, group_id: u32, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
         let values: Vec<_> = picture_ids
             .into_iter()
-            .map(|pic_id| (groups_pictures::group_id.eq(self.id), groups_pictures::picture_id.eq(pic_id)))
+            .map(|pic_id| (groups_pictures::group_id.eq(group_id), groups_pictures::picture_id.eq(pic_id)))
             .collect();
 
         diesel::insert_into(groups_pictures::table)

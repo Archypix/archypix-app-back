@@ -2,6 +2,7 @@ use crate::database::database::DBConn;
 use crate::database::schema::last_insert_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::dsl::select;
+use diesel::query_builder::QueryId;
 use diesel::RunQueryDsl;
 
 pub fn is_error_duplicate_key(error: &diesel::result::Error, key: &str) -> bool {

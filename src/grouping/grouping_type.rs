@@ -1,0 +1,160 @@
+use crate::database::database::DBConn;
+use crate::database::group::group::Group;
+use crate::database::tag::tag::Tag;
+use crate::grouping::grouping_filter_strategy::GroupingFilterStrategy;
+use crate::grouping::grouping_strategy::ExifDataTypeValue;
+use crate::utils::errors_catcher::ErrorResponder;
+use rocket::serde::{Deserialize, Serialize};
+use rocket_okapi::JsonSchema;
+use std::collections::{HashMap, HashSet};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum GroupingType {
+    GroupByFilter(FilterGrouping),
+    GroupByTags(TagGrouping),
+    GroupByExifValues(ExifValuesGrouping),
+    GroupByExifInterval(ExifIntervalGrouping),
+    GroupByLocation(LocationGrouping),
+}
+
+impl GroupingType {
+    pub fn get_groups(&self) -> Vec<u32> {
+        match self {
+            GroupingType::GroupByFilter(f) => {
+                let mut groups: Vec<u32> = f.filters.iter().map(|(_, id)| *id).collect();
+                if let Some(id) = f.other_group_id {
+                    (&mut groups).push(id);
+                }
+                groups
+            }
+            GroupingType::GroupByTags(t) => {
+                let mut groups: Vec<u32> = t.tag_id_to_group_id.values().cloned().collect();
+                if let Some(id) = t.other_group_id {
+                    (&mut groups).push(id);
+                }
+                groups
+            }
+            GroupingType::GroupByExifValues(e) => e.values_to_group_id.clone(),
+            GroupingType::GroupByExifInterval(e) => {
+                let mut groups: Vec<u32> = e.group_ids_decreasing.clone();
+                groups.append(&mut e.group_ids_increasing.clone());
+                groups
+            }
+            GroupingType::GroupByLocation(l) => l.clusters_ids.clone(),
+        }
+    }
+    pub fn get_dependant_arrangements(&self) -> HashSet<u32> {
+        let mut set = HashSet::new();
+        match self {
+            GroupingType::GroupByFilter(f) => {
+                for (filter, _) in &f.filters {
+                    set.extend(filter.get_dependant_arrangements());
+                }
+            }
+            _ => {}
+        }
+        set
+    }
+    pub(crate) fn is_groups_dependant(&self) -> bool {
+        match self {
+            GroupingType::GroupByFilter(f) => f.is_groups_dependant(),
+            _ => false,
+        }
+    }
+    pub(crate) fn is_tags_dependant(&self) -> bool {
+        match self {
+            GroupingType::GroupByFilter(f) => f.is_tags_dependant(),
+            GroupingType::GroupByTags(_) => true,
+            _ => false,
+        }
+    }
+    pub(crate) fn is_exif_dependant(&self) -> bool {
+        match self {
+            GroupingType::GroupByFilter(f) => f.is_exif_dependant(),
+            GroupingType::GroupByExifValues(_) | GroupingType::GroupByExifInterval(_) | GroupingType::GroupByLocation(_) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FilterGrouping {
+    pub filters: Vec<(GroupingFilterStrategy, u32)>, // Value is the id of the corresponding group
+    pub other_group_id: Option<u32>,                 // Id of the group for the pictures that do not match any filter
+}
+impl FilterGrouping {
+    pub fn get_or_create_other_group_id(&mut self, conn: &mut DBConn, arrangement_id: u32) -> Result<(u32, bool), ErrorResponder> {
+        if let Some(id) = self.other_group_id {
+            Ok((id, false))
+        } else {
+            let id = Group::insert(conn, arrangement_id, "Other".to_string(), false)?.id;
+            self.other_group_id = Some(id);
+            Ok((id, true))
+        }
+    }
+    pub fn is_groups_dependant(&self) -> bool {
+        self.filters.iter().any(|(f, _)| f.is_groups_dependant())
+    }
+    pub fn is_tags_dependant(&self) -> bool {
+        self.filters.iter().any(|(f, _)| f.is_tags_dependant())
+    }
+    pub fn is_exif_dependant(&self) -> bool {
+        self.filters.iter().any(|(f, _)| f.is_exif_dependant())
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TagGrouping {
+    pub tag_group_id: u32,
+    pub tag_id_to_group_id: HashMap<u32, u32>,
+    pub other_group_id: Option<u32>,
+    pub group_names_format: String,
+}
+impl TagGrouping {
+    pub fn get_or_create_tag_group_id(&mut self, conn: &mut DBConn, tag: &Tag, arrangement_id: u32) -> Result<(u32, bool), ErrorResponder> {
+        if let Some(id) = self.tag_id_to_group_id.get(&tag.id) {
+            Ok((*id, false))
+        } else {
+            let id = Group::insert(conn, arrangement_id, self.format_group_name(&tag), false)?.id;
+            self.other_group_id = Some(id);
+            Ok((id, true))
+        }
+    }
+    pub fn get_or_create_other_group_id(&mut self, conn: &mut DBConn, arrangement_id: u32) -> Result<(u32, bool), ErrorResponder> {
+        if let Some(id) = self.other_group_id {
+            Ok((id, false))
+        } else {
+            let id = Group::insert(conn, arrangement_id, "Other".to_string(), false)?.id;
+            self.other_group_id = Some(id);
+            Ok((id, true))
+        }
+    }
+    pub fn format_group_name(&self, tag: &Tag) -> String {
+        // TODO: implement formatting rule with self.group_names_format
+        tag.name.clone()
+    }
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ExifValuesGrouping {
+    pub data_type: ExifDataTypeValue, // data vec contains the values for each group
+    pub values_to_group_id: Vec<u32>, // The value at index i is the id of the group for the value at index i in the data vec
+    pub group_names_format: String,
+    pub other_group_id: Option<u32>,
+}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExifIntervalGrouping {
+    /* ... | interval -2 | interval -1 |origin| interval 1 | interval 2 | ...
+     * ... | decreasing  | decreasing  |origin| increasing | increasing | ...
+     * ... | index 1     | index 0     |origin| index 0    | index 1    | ...
+     */
+    pub interval: ExifDataTypeValue,    // First value is origin, second is interval
+    pub group_ids_increasing: Vec<u32>, // ids of groups for intervals after the origin
+    pub group_ids_decreasing: Vec<u32>, // ids of groups for intervals before the origin (in reverse order)
+    pub group_names_format: String,     // Datetime format or number format.
+}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LocationGrouping {
+    pub clusters_ids: Vec<u32>, // Ids of the groups for each cluster
+    pub is_date_ordered: bool,
+    pub sharpness: u32,
+}

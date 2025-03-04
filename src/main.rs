@@ -32,78 +32,44 @@ use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use std::env;
 use user_agent_parser::UserAgentParser;
 
-mod api {
-    pub mod picture;
-    pub mod query_pictures;
-
+pub mod api {
+    automod::dir!(pub "src/api");
     pub mod admin {
-        pub mod admin;
+        automod::dir!(pub "src/api/admin");
     }
-
-    pub mod groups {
-        pub mod manual_groups;
-    }
-
     pub mod auth {
-        pub mod confirm;
-        pub mod signin;
-        pub mod signup;
-        pub mod status;
+        automod::dir!(pub "src/api/auth");
+    }
+    pub mod groups {
+        automod::dir!(pub "src/api/groups");
     }
 }
-mod database {
-    pub mod database;
-    pub mod schema;
-    pub mod utils;
-
-    pub mod user {
-        pub mod auth_token;
-        pub mod confirmation;
-        pub mod friend;
-        pub mod totp_secret;
-        pub mod user;
-    }
-
+pub mod database {
+    automod::dir!(pub "src/database");
     pub mod group {
-        pub mod arrangement;
-        pub mod group;
-        pub mod group_picture;
-        pub mod link_share_group;
-        pub mod shared_group;
+        automod::dir!(pub "src/database/group");
     }
-
-    pub mod picture {
-        pub mod duplicate;
-        pub mod duplicate_group;
-        pub mod picture;
-        pub mod picture_tag;
-        pub mod rating;
-    }
-
     pub mod hierarchy {
-        pub mod hierarchy;
-        pub mod hierarchy_arrangement;
+        automod::dir!(pub "src/database/hierarchy");
     }
-
+    pub mod picture {
+        automod::dir!(pub "src/database/picture");
+    }
     pub mod tag {
-        pub mod tag;
-        pub mod tag_group;
+        automod::dir!(pub "src/database/tag");
+    }
+    pub mod user {
+        automod::dir!(pub "src/database/user");
     }
 }
-mod grouping {
-    pub mod grouping_strategy;
+pub mod grouping {
+    automod::dir!(pub "src/grouping/");
 }
-mod mailing {
-    pub mod mailer;
+pub mod mailing {
+    automod::dir!(pub "src/mailing");
 }
-mod utils {
-    pub mod auth;
-    pub mod errors_catcher;
-    pub mod exif;
-    pub mod s3;
-    pub mod thumbnail;
-    pub mod utils;
-    pub mod validation;
+pub mod utils {
+    automod::dir!(pub "src/utils");
 }
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");

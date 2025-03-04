@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+automod = "1.0"
 async-trait = "0.1.84"
-libunftp = "0.20.3"
 rocket = { version = "0.5.1", features = ["json"] }
 tracing-attributes = "0.1.28"
 tokio = "1.37.0"
 diesel_derives = "2.1.2"
 diesel_migrations = "2.1.0"
 dotenvy = "0.15.7"
-rand = "0.8.5"
+rand = "0.9.0"
 diesel-derive-enum = { version = "2.1.0", features = ["mysql"] }
 chrono = { version = "0.4", features = ["clock", "serde"] }
 chrono-tz = { version = "0.10.0", default-features = false, features = ["serde"] }
@@ -32,8 +32,8 @@ totp-rs = { version = "5.6.0", features = ["qr", "otpauth"] }
 rocket_okapi = { version = "0.9.0", features = ["swagger", "rapidoc"] }
 # JsonSchema trait
 schemars = { version = "0.8.21", features = ["chrono", "bigdecimal04"]}
-strum = "0.26.3"
-strum_macros = "0.26.4"
+strum = "0.27.1"
+strum_macros = "0.27.1"
 rexiv2 = "0.10.0"
 num-rational = "0.4.2"
 serde_json = "1.0.135"

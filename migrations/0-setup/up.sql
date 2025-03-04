@@ -63,11 +63,12 @@ CREATE TABLE friends
 CREATE TABLE tag_groups
 (
     CONSTRAINT PK_tag_groups PRIMARY KEY (id),
-    id       INT UNSIGNED AUTO_INCREMENT,
-    user_id  INT UNSIGNED NOT NULL,
-    name     VARCHAR(32)  NOT NULL,
-    multiple BOOLEAN      NOT NULL DEFAULT FALSE,
-    required BOOLEAN      NOT NULL DEFAULT FALSE,
+    id             INT UNSIGNED AUTO_INCREMENT,
+    user_id        INT UNSIGNED NOT NULL,
+    name           VARCHAR(32)  NOT NULL,
+    multiple       BOOLEAN      NOT NULL DEFAULT FALSE,
+    default_tag_id INT UNSIGNED          DEFAULT NULL,
+    required       BOOLEAN      NOT NULL DEFAULT FALSE,
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

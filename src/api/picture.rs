@@ -1,12 +1,14 @@
 use crate::api::query_pictures::{PictureFilter, PictureSort, PicturesQuery};
 use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::picture::Picture;
-use crate::database::schema::pictures::width;
+use crate::database::schema::pictures::{edition_date, width};
 use crate::database::user::user::User;
+use crate::grouping::grouping_process::group_new_pictures;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorResponse, ErrorType};
 use crate::utils::s3::PictureStorer;
 use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};
 use aws_smithy_types::byte_stream::ByteStream;
+use chrono::NaiveDateTime;
 use rand::random;
 use rocket::form::Form;
 use rocket::fs::TempFile;
@@ -77,7 +79,9 @@ pub async fn add_picture(
         let picture = err_transaction(conn, |conn| {
             let picture = Picture::insert(conn, user.id, file_name.clone(), meta)?;
 
-            // TODO: request to add the picture to its matching groups
+            // TODO: add to default tags
+
+            group_new_pictures(conn, user.id, vec![picture.id])?;
 
             // Upload file to S3
             task::block_in_place(|| {
@@ -175,6 +179,8 @@ pub struct ListPictureData {
     pub(crate) name: String,
     pub(crate) width: u16,
     pub(crate) height: u16,
+    pub(crate) creation_date: NaiveDateTime,
+    pub(crate) edition_date: NaiveDateTime,
 }
 
 /// Query pictures using custom query filters and sorting parameters.

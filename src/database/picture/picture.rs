@@ -8,11 +8,12 @@ use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
-use diesel::dsl::{insert_into, not, Filter, Nullable};
+use diesel::dsl::{exists, insert_into, not, Filter, Nullable};
 use diesel::helper_types::{IntoBoxed, LeftJoin, LeftJoinOn, LeftJoinQuerySource, Or};
 use diesel::internal::table_macro::{BoxedSelectStatement, FromClause, Join, JoinOn, LeftOuter, SelectStatement};
 use diesel::mysql::Mysql;
 use diesel::query_builder::QueryFragment;
+use diesel::query_dsl::InternalJoinDsl;
 use diesel::sql_types::{BigInt, Binary, Bool, Datetime, Decimal, Integer, SmallInt, Text, TinyInt, Unsigned, VarChar, Varchar};
 use diesel::JoinOnDsl;
 use diesel::QueryDsl;
@@ -67,11 +68,25 @@ impl Picture {
             pictures = pictures::table
                 .filter(pictures::dsl::owner_id.eq(user_id))
                 .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
-                .select((pictures::dsl::id, pictures::dsl::name, pictures::dsl::width, pictures::dsl::height))
-                .load::<(u64, String, u16, u16)>(conn)
+                .select((
+                    pictures::id,
+                    pictures::name,
+                    pictures::width,
+                    pictures::height,
+                    pictures::creation_date,
+                    pictures::edition_date,
+                ))
+                .load::<(u64, String, u16, u16, NaiveDateTime, NaiveDateTime)>(conn)
                 .map(|vec| {
                     vec.into_iter()
-                        .map(|(id, name, width, height)| ListPictureData { id, name, width, height })
+                        .map(|(id, name, width, height, creation_date, edition_date)| ListPictureData {
+                            id,
+                            name,
+                            width,
+                            height,
+                            creation_date,
+                            edition_date,
+                        })
                         .collect()
                 })
                 .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?;
@@ -83,11 +98,25 @@ impl Picture {
                     .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
                     .filter(shared_groups::dsl::user_id.eq(user_id))
                     .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
-                    .select((pictures::dsl::id, pictures::dsl::name, pictures::dsl::width, pictures::dsl::height))
-                    .load::<(u64, String, u16, u16)>(conn)
+                    .select((
+                        pictures::id,
+                        pictures::name,
+                        pictures::width,
+                        pictures::height,
+                        pictures::creation_date,
+                        pictures::edition_date,
+                    ))
+                    .load::<(u64, String, u16, u16, NaiveDateTime, NaiveDateTime)>(conn)
                     .map(|vec| {
                         vec.into_iter()
-                            .map(|(id, name, width, height)| ListPictureData { id, name, width, height })
+                            .map(|(id, name, width, height, creation_date, edition_date)| ListPictureData {
+                                id,
+                                name,
+                                width,
+                                height,
+                                creation_date,
+                                edition_date,
+                            })
                             .collect()
                     })
                     .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?,
@@ -101,18 +130,10 @@ impl Picture {
         assert_ne!(query.page, 0, "Page number must be greater than 0");
         let page_size: u32 = 100;
 
-        // Making an initial big join request with any table that might be needed.
-        // The SQL optimizer will remove any unnecessary joins.
+        // Initial request that returns all the pictures the user can see
         let mut dsl_query = pictures::table
-            // Join with groups_pictures & shared_groups (for shared pictures)
             .left_join(groups_pictures::table.on(groups_pictures::dsl::picture_id.eq(pictures::dsl::id)))
             .left_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
-            // Join with groups_pictures (already done) and groups (for group and arrangement queries)
-            .left_join(groups::table.on(groups::dsl::id.eq(groups_pictures::dsl::group_id)))
-            // Join with picture_tags and tags (for tags and tag_groups queries)
-            .left_join(pictures_tags::table.on(pictures_tags::dsl::picture_id.eq(pictures::dsl::id)))
-            .left_join(tags::table.on(tags::dsl::id.eq(pictures_tags::dsl::tag_id)))
-            // Filter only pictures that the user can see :
             .filter(
                 pictures::dsl::owner_id
                     .eq(user_id) // Owned picture
@@ -132,31 +153,55 @@ impl Picture {
                 }
                 PictureFilter::Deleted { invert } => dsl_query.filter(pictures::dsl::deleted_date.is_null().eq(invert)),
                 PictureFilter::Arrangement { invert, ids } => {
+                    let gp_alias = diesel::alias!(groups_pictures as gp_alias);
+                    let subquery = exists(
+                        gp_alias
+                            .inner_join(groups::table.on(groups::id.eq(gp_alias.field(groups_pictures::group_id))))
+                            .filter(gp_alias.field(groups_pictures::picture_id).eq(pictures::id))
+                            .filter(groups::arrangement_id.eq_any(ids)),
+                    );
                     if !invert {
-                        dsl_query.filter(groups::dsl::arrangement_id.eq_any(ids))
+                        dsl_query.filter(subquery)
                     } else {
-                        dsl_query.filter(not(groups::dsl::arrangement_id.eq_any(ids)))
+                        dsl_query.filter(not(subquery))
                     }
                 }
                 PictureFilter::Group { invert, ids } => {
+                    let gp_alias = diesel::alias!(groups_pictures as gp_alias);
+                    let subquery = exists(
+                        gp_alias
+                            .filter(gp_alias.field(groups_pictures::picture_id).eq(pictures::id))
+                            .filter(gp_alias.field(groups_pictures::group_id).eq_any(ids)),
+                    );
                     if !invert {
-                        dsl_query.filter(groups_pictures::dsl::group_id.eq_any(ids))
+                        dsl_query.filter(subquery)
                     } else {
-                        dsl_query.filter(not(groups_pictures::dsl::group_id.eq_any(ids)))
+                        dsl_query.filter(not(subquery))
                     }
                 }
                 PictureFilter::TagGroup { invert, ids } => {
+                    let subquery = exists(
+                        pictures_tags::table
+                            .inner_join(tags::table.on(tags::id.eq(pictures_tags::tag_id)))
+                            .filter(pictures_tags::picture_id.eq(pictures::id))
+                            .filter(tags::tag_group_id.eq_any(ids)),
+                    );
                     if !invert {
-                        dsl_query.filter(tags::dsl::tag_group_id.eq_any(ids))
+                        dsl_query.filter(subquery)
                     } else {
-                        dsl_query.filter(not(tags::dsl::tag_group_id.eq_any(ids)))
+                        dsl_query.filter(not(subquery))
                     }
                 }
                 PictureFilter::Tag { invert, ids } => {
+                    let subquery = exists(
+                        pictures_tags::table
+                            .filter(pictures_tags::picture_id.eq(pictures::id))
+                            .filter(pictures_tags::tag_id.eq_any(ids)),
+                    );
                     if !invert {
-                        dsl_query.filter(pictures_tags::dsl::tag_id.eq_any(ids))
+                        dsl_query.filter(subquery)
                     } else {
-                        dsl_query.filter(not(pictures_tags::dsl::tag_id.eq_any(ids)))
+                        dsl_query.filter(not(subquery))
                     }
                 }
             }
@@ -187,12 +232,26 @@ impl Picture {
 
         // Fetching the pictures
         let pictures: Vec<ListPictureData> = dsl_query
-            .select((pictures::dsl::id, pictures::dsl::name, pictures::dsl::width, pictures::dsl::height))
+            .select((
+                pictures::id,
+                pictures::name,
+                pictures::width,
+                pictures::height,
+                pictures::creation_date,
+                pictures::edition_date,
+            ))
             .distinct()
-            .load::<(u64, String, u16, u16)>(conn)
+            .load::<(u64, String, u16, u16, NaiveDateTime, NaiveDateTime)>(conn)
             .map(|vec| {
                 vec.into_iter()
-                    .map(|(id, name, width, height)| ListPictureData { id, name, width, height })
+                    .map(|(id, name, width, height, creation_date, edition_date)| ListPictureData {
+                        id,
+                        name,
+                        width,
+                        height,
+                        creation_date,
+                        edition_date,
+                    })
                     .collect()
             })
             .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?;

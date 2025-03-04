@@ -51,8 +51,7 @@ pub async fn add_pictures_to_group(db: &State<DBPool>, user: User, request: Json
             return Err(ErrorType::GroupIsNotManual.res());
         }
         // Get the group and verify it belongs to the arrangement
-        let group = Group::from_id_and_arrangement(conn, request.group_id, request.arrangement_id)?;
-        group.add_pictures(conn, request.picture_ids.clone())?;
+        Group::add_pictures(conn, request.group_id, request.picture_ids.clone())?;
         Ok(())
     })
 }
