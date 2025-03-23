@@ -94,23 +94,30 @@ impl Arrangement {
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())
     }
-    /// List all users’ non-manual arrangements, providing the deserialized strategy and the list of groups
+    /// List all users’ non-manual arrangements, providing the deserialized strategy, the list of groups and the list of dependant arrangements
     pub fn list_arrangements_and_groups(conn: &mut DBConn, user_id: u32) -> Result<Vec<ArrangementDetails>, ErrorResponder> {
-        Self::list_arrangements(conn, user_id)?
+        let mut arrangements = Self::list_arrangements(conn, user_id)?
             .into_iter()
             .filter(|arrangement| arrangement.strategy.is_some())
             .map(|arrangement| {
                 let strategy = arrangement.get_strategy()?.unwrap();
                 let groups = strategy.groupings.get_groups();
-                let dependant_arrangements = strategy.get_dependant_arrangements(conn)?;
-                Ok(ArrangementDetails {
+                let dependant_groups = strategy.get_dependant_groups();
+                Ok::<ArrangementDetails, ErrorResponder>(ArrangementDetails {
                     arrangement,
                     strategy,
-                    dependant_arrangements,
+                    dependant_groups,
+                    dependant_arrangements: vec![],
                     groups,
                 })
             })
-            .collect()
+            .collect::<Result<Vec<ArrangementDetails>, ErrorResponder>>()?;
+
+        for i in 0..arrangements.len() - 1 {
+            let cloned_arrangements = arrangements.clone();
+            arrangements[i].set_dependant_arrangements_auto(&cloned_arrangements);
+        }
+        Ok(arrangements)
     }
     /// Get all arrangements containing at least one of the provided groups
     pub fn get_arrangements_from_groups_ids(conn: &mut DBConn, groups_ids: Vec<u32>) -> Result<Vec<Arrangement>, ErrorResponder> {
@@ -126,6 +133,17 @@ impl Arrangement {
 pub struct ArrangementDetails {
     pub arrangement: Arrangement,
     pub strategy: ArrangementStrategy,
+    pub dependant_groups: Vec<u32>,
     pub dependant_arrangements: Vec<u32>,
     pub groups: Vec<u32>,
+}
+impl ArrangementDetails {
+    pub fn set_dependant_arrangements_auto(&mut self, all_arrangements_details: &Vec<ArrangementDetails>) {
+        self.dependant_arrangements = all_arrangements_details
+            .iter()
+            .filter(|arr| arr.groups.iter().any(|g| self.dependant_groups.contains(g)))
+            .map(|arr| arr.arrangement.id)
+            .clone()
+            .collect();
+    }
 }

@@ -45,6 +45,35 @@ impl ErrorResponder {
         }
         .rollback
     }
+    pub fn with_rollback(&self, rollback: bool) -> ErrorResponder {
+        match self {
+            ErrorResponder::BadRequest(json) => {
+                let mut json = Json(json.0.clone());
+                json.rollback = rollback;
+                ErrorResponder::BadRequest(json)
+            }
+            ErrorResponder::Unauthorized(json) => {
+                let mut json = Json(json.0.clone());
+                json.rollback = rollback;
+                ErrorResponder::Unauthorized(json)
+            }
+            ErrorResponder::NotFound(json) => {
+                let mut json = Json(json.0.clone());
+                json.rollback = rollback;
+                ErrorResponder::NotFound(json)
+            }
+            ErrorResponder::UnprocessableEntity(json) => {
+                let mut json = Json(json.0.clone());
+                json.rollback = rollback;
+                ErrorResponder::UnprocessableEntity(json)
+            }
+            ErrorResponder::InternalError(json) => {
+                let mut json = Json(json.0.clone());
+                json.rollback = rollback;
+                ErrorResponder::InternalError(json)
+            }
+        }
+    }
 }
 /// Dummy implementation for OpenApi
 impl OpenApiResponderInner for ErrorResponder {
@@ -54,7 +83,7 @@ impl OpenApiResponderInner for ErrorResponder {
 }
 
 /// Error response data struct
-#[derive(JsonSchema, Serialize, Debug)]
+#[derive(JsonSchema, Serialize, Debug, Clone)]
 pub struct ErrorResponse {
     pub error_type: ErrorTypeKind,
     pub message: String,

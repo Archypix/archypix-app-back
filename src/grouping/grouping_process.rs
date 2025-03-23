@@ -1,23 +1,33 @@
 use crate::database::database::DBConn;
 use crate::database::group::arrangement::{Arrangement, ArrangementDetails};
 use crate::database::group::group::Group;
+use crate::database::group::shared_group::SharedGroup;
 use crate::database::picture::picture_tag::PictureTag;
+use crate::database::schema::shared_groups;
 use crate::database::tag::tag::Tag;
 use crate::grouping::strategy_grouping::StrategyGrouping;
 use crate::utils::errors_catcher::ErrorResponder;
 use std::collections::{HashMap, HashSet};
 
-pub fn group_new_pictures(conn: &mut DBConn, user_id: u32, pictures: Vec<u64>) -> Result<(), ErrorResponder> {
+pub fn group_new_pictures(
+    conn: &mut DBConn,
+    user_id: u32,
+    pictures: &Vec<u64>,
+    already_processed_users: &mut HashSet<u32>,
+) -> Result<(), ErrorResponder> {
     // Fetch all not manual arrangements and the list of their groups ids
     let arrangements = Arrangement::list_arrangements_and_groups(conn, user_id)?;
 
     // Sort topologically the arrangements in function of their dependencies over a group of another arrangement
-    let arrangements: Vec<ArrangementDetails> = topological_sort(arrangements);
+    let mut arrangements: Vec<ArrangementDetails> = topological_sort(arrangements);
 
-    for mut arrangement in arrangements {
+    for mut arrangement in arrangements.iter_mut() {
         // Keep only pictures that match this arrangement
-        info!("Processing arrangement: {:?}", arrangement.arrangement.id);
-        let pictures_ids = arrangement.strategy.filter.filter_pictures(conn, &pictures)?;
+        info!(
+            "Grouping pictures into arrangement: {:?} of user {:?}",
+            arrangement.arrangement.id, user_id
+        );
+        let pictures_ids = arrangement.strategy.filter.filter_pictures(conn, pictures)?;
 
         // Add pictures to groups
 
@@ -43,11 +53,7 @@ pub fn group_new_pictures(conn: &mut DBConn, user_id: u32, pictures: Vec<u64>) -
             }
             StrategyGrouping::GroupByTags(tag_grouping) => {
                 let mut remaining_pictures_ids = pictures_ids.clone();
-                let tags = Tag::list_tags(conn, user_id)?;
-                // TODO: Fetch all tags of the group,
-                //  then for each tag, fetch the pictures that have this tag and add them to the matching group
-                //  add the remaining pictures to the other group
-                //  Take in account preserve_unicity to maybe add a picture to multiple groups
+                let tags = Tag::list_tags(conn, tag_grouping.tag_group_id)?;
                 for tag in tags {
                     let pictures_to_group = if arrangement.strategy.preserve_unicity {
                         &remaining_pictures_ids
@@ -77,8 +83,19 @@ pub fn group_new_pictures(conn: &mut DBConn, user_id: u32, pictures: Vec<u64>) -
             let strategy = arrangement.strategy.clone();
             arrangement.arrangement.set_strategy(conn, strategy)?;
         }
-
-        // If the group is shared, add the picture to the groups of the other users
+    }
+    already_processed_users.insert(user_id);
+    // Process other users if arrangements groups are shared
+    for arrangement in arrangements.iter() {
+        for group_id in &arrangement.groups {
+            let shared_groups = SharedGroup::from_group_id(conn, *group_id)?;
+            for shared_group in shared_groups {
+                if !already_processed_users.contains(&shared_group.user_id) {
+                    already_processed_users.insert(shared_group.user_id);
+                    group_new_pictures(conn, shared_group.user_id, pictures, already_processed_users)?;
+                }
+            }
+        }
     }
 
     Ok(())
@@ -91,7 +108,7 @@ pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<Arrang
 
     let mut id_map: HashMap<u32, &ArrangementDetails> = HashMap::new();
     for arrangement in &arrangements {
-        id_map.insert(arrangement.arrangement.id, &arrangement);
+        id_map.insert(arrangement.arrangement.id, arrangement);
     }
 
     // Recursive DFS helper for topological sort

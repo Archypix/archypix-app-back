@@ -20,9 +20,13 @@ pub struct ArrangementStrategy {
 
 impl ArrangementStrategy {
     pub fn get_dependant_arrangements(&self, conn: &mut DBConn) -> Result<Vec<u32>, ErrorResponder> {
+        Arrangement::get_arrangements_from_groups_ids(conn, self.get_dependant_groups())
+            .map(|arrangements| arrangements.iter().map(|a| a.id).collect())
+    }
+    pub fn get_dependant_groups(&self) -> Vec<u32> {
         let mut dependant_groups = self.filter.get_dependant_groups();
         dependant_groups.extend(self.groupings.get_dependant_groups());
-        Arrangement::get_arrangements_from_groups_ids(conn, dependant_groups).map(|arrangements| arrangements.iter().map(|a| a.id).collect())
+        dependant_groups
     }
     pub fn is_groups_dependant(&self) -> bool {
         self.filter.is_groups_dependant() || self.groupings.is_groups_dependant()

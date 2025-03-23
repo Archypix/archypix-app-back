@@ -12,6 +12,7 @@ use chrono::NaiveDateTime;
 use rand::random;
 use rocket::form::Form;
 use rocket::fs::TempFile;
+use rocket::futures::future::always_ready;
 use rocket::response::Responder;
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
@@ -22,6 +23,7 @@ use rocket_okapi::response::OpenApiResponderInner;
 use rocket_okapi::{openapi, JsonSchema};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
+use std::collections::HashSet;
 use std::path::Path;
 use strum::IntoEnumIterator;
 use tokio::task;
@@ -81,7 +83,9 @@ pub async fn add_picture(
 
             // TODO: add to default tags
 
-            group_new_pictures(conn, user.id, vec![picture.id])?;
+            let pictures = vec![picture.id];
+            let mut already_processed_users = HashSet::new();
+            group_new_pictures(conn, user.id, &pictures, &mut already_processed_users).map_err(|e| e.with_rollback(true))?;
 
             // Upload file to S3
             task::block_in_place(|| {
