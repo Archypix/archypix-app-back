@@ -56,10 +56,10 @@ pub fn auth_confirm_code(
 ) -> Result<Json<ConfirmResponse>, ErrorResponder> {
     validate_input(&data)?;
     let conn: &mut DBConn = &mut db.get().unwrap();
-    let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res())?;
+    let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res_no_rollback())?;
     let user = User::from_id(conn, &user_id)?;
 
-    let code_token = hex::decode(&data.code_token).map_err(|_| ErrorType::UnprocessableEntity.res())?;
+    let code_token = hex::decode(&data.code_token).map_err(|_| ErrorType::UnprocessableEntity.res_no_rollback())?;
 
     err_transaction(conn, |conn| {
         let redirect_url =
@@ -79,10 +79,10 @@ pub fn auth_confirm_token(
 ) -> Result<Json<ConfirmResponse>, ErrorResponder> {
     validate_input(&data)?;
     let conn: &mut DBConn = &mut db.get().unwrap();
-    let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res())?;
+    let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res_no_rollback())?;
     let user = User::from_id(conn, &user_id)?;
 
-    let token = hex::decode(&data.token).map_err(|_| ErrorType::UnprocessableEntity.res())?;
+    let token = hex::decode(&data.token).map_err(|_| ErrorType::UnprocessableEntity.res_no_rollback())?;
 
     err_transaction(conn, |conn| {
         let redirect_url = Confirmation::check_token_and_mark_as_used(conn, &user_id, &data.action, &token, 15)?.unwrap_or(get_frontend_host());
@@ -124,6 +124,6 @@ fn confirm_execute(
                 redirect_url,
             })))
         }
-        _ => ErrorType::BadRequest.res_err(),
+        _ => ErrorType::BadRequest.res_err_no_rollback(),
     }
 }

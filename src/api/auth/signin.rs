@@ -48,14 +48,14 @@ pub fn auth_signin(data: Json<SigninData>, db: &rocket::State<DBPool>, device_in
         if user.tfa_login {
             if let Some(totp_code) = &data.totp_code {
                 if !TOTPSecret::check_user_totp(conn, &user.id, totp_code)? {
-                    return ErrorType::InvalidTOTPCode.res_err();
+                    return ErrorType::InvalidTOTPCode.res_err_no_rollback();
                 }
             } else {
                 // 2FA Required, checking if TOTP is available
                 if TOTPSecret::has_user_totp(conn, &user.id)? {
-                    return ErrorType::TFARequired.res_err();
+                    return ErrorType::TFARequired.res_err_no_rollback();
                 }
-                return ErrorType::TFARequiredOverEmail.res_err();
+                return ErrorType::TFARequiredOverEmail.res_err_no_rollback();
             }
         }
 
@@ -116,12 +116,12 @@ fn check_user_password_and_status(conn: &mut DBConn, email: &str, password: &str
                 return Ok(user);
             }
         }
-        ErrorType::InvalidEmailOrPassword.res_err()
+        ErrorType::InvalidEmailOrPassword.res_err_no_rollback()
     })?;
 
     match user.status {
-        UserStatus::Banned => ErrorType::UserBanned.res_err(),
-        UserStatus::Unconfirmed => ErrorType::UserUnconfirmed.res_err(),
+        UserStatus::Banned => ErrorType::UserBanned.res_err_no_rollback(),
+        UserStatus::Unconfirmed => ErrorType::UserUnconfirmed.res_err_no_rollback(),
         _ => Ok(user),
     }
 }

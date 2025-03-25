@@ -31,7 +31,7 @@ impl FromParam<'_> for PictureThumbnail {
             "small" => Ok(PictureThumbnail::Small),
             "medium" => Ok(PictureThumbnail::Medium),
             "large" => Ok(PictureThumbnail::Large),
-            _ => ErrorType::NotFound(String::from("Invalid thumbnail type")).res_err(),
+            _ => ErrorType::NotFound(String::from("Invalid thumbnail type")).res_err_no_rollback(),
         }
     }
 }
@@ -55,7 +55,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
     let mut wand = MagickWand::new();
     if let Err(e) = wand.read_image(source_file.to_str().unwrap()) {
         warn!("{:?}", e);
-        return ErrorType::UnableToCreateThumbnail(String::from("Unable to read image")).res_err();
+        return ErrorType::UnableToCreateThumbnail(String::from("Unable to read image")).res_err_no_rollback();
     }
 
     let size = thumbnail_type.get_thumbnail_size();
@@ -67,7 +67,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
 
     if let Err(e) = wand.set_image_format("webp") {
         warn!("{:?}", e);
-        return ErrorType::UnableToCreateThumbnail(String::from("Unable to set image format")).res_err();
+        return ErrorType::UnableToCreateThumbnail(String::from("Unable to set image format")).res_err_no_rollback();
     }
 
     let dest_file = Path::new(THUMBS_TEMP_DIR).join(source_file.file_name().unwrap().to_str().unwrap());
@@ -75,7 +75,7 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
 
     if let Err(e) = wand.write_image(dest_file_path) {
         warn!("{:?}", e);
-        return ErrorType::UnableToCreateThumbnail(String::from("Unable to write image")).res_err();
+        return ErrorType::UnableToCreateThumbnail(String::from("Unable to write image")).res_err_no_rollback();
     }
 
     Ok(dest_file)

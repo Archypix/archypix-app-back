@@ -46,7 +46,7 @@ impl AuthToken {
                     warn!("Auth token already exists, trying again.");
                     return AuthToken::insert_token_for_user(conn, user_id, device_info, try_count + 1);
                 }
-                ErrorType::DatabaseError("Failed to insert auth token".to_string(), e).res_err_rollback()
+                ErrorType::DatabaseError("Failed to insert auth token".to_string(), e).res_err()
             })
     }
     pub fn update_last_use_date(&self, conn: &mut DBConn) -> Result<(), ErrorResponder> {
@@ -59,7 +59,7 @@ impl AuthToken {
                 .filter(auth_tokens::dsl::token.eq(self.token.clone()))
                 .set((auth_tokens::dsl::last_use_date.eq(utc_timestamp()),))
                 .execute(conn)
-                .map_err(|e| ErrorType::DatabaseError("Failed to update auth token use date".to_string(), e).res())?;
+                .map_err(|e| ErrorType::DatabaseError("Failed to update auth token use date".to_string(), e).res_no_rollback())?;
         }
         Ok(())
     }
@@ -71,6 +71,6 @@ impl AuthToken {
             .filter(auth_tokens::dsl::user_id.eq(user_id))
             .execute(conn)
             .map(|_| ())
-            .map_err(|e| ErrorType::DatabaseError("Failed to delete existing auth tokens".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to delete existing auth tokens".to_string(), e).res())
     }
 }

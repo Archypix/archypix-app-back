@@ -325,7 +325,7 @@ impl Picture {
                 pictures::dsl::f_number.eq(p.f_number),
             ))
             .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res_rollback())?;
+            .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res())?;
 
         picture.id = get_last_inserted_id(conn)?;
 

@@ -30,7 +30,7 @@ impl Arrangement {
         strong_match_conversion: bool,
         strategy: ArrangementStrategy,
     ) -> Result<Arrangement, ErrorResponder> {
-        let strategy_bytes = serde_json::to_vec(&strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?;
+        let strategy_bytes = serde_json::to_vec(&strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res_no_rollback())?;
 
         let mut arrangement = Arrangement {
             id: 0,
@@ -50,14 +50,14 @@ impl Arrangement {
                 arrangements::strong_match_conversion.eq(&arrangement.strong_match_conversion),
             ))
             .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())?;
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
 
         arrangement.id = get_last_inserted_id(conn)? as u32;
         Ok(arrangement)
     }
 
     pub fn from_id_and_user_id(conn: &mut DBConn, arrangement_id: u32, user_id: u32) -> Result<Arrangement, ErrorResponder> {
-        Self::from_id_and_user_id_opt(conn, arrangement_id, user_id)?.ok_or_else(|| ErrorType::ArrangementNotFound.res_rollback())
+        Self::from_id_and_user_id_opt(conn, arrangement_id, user_id)?.ok_or_else(|| ErrorType::ArrangementNotFound.res())
     }
     pub fn from_id_and_user_id_opt(conn: &mut DBConn, arrangement_id: u32, user_id: u32) -> Result<Option<Arrangement>, ErrorResponder> {
         arrangements::table
@@ -65,13 +65,13 @@ impl Arrangement {
             .filter(arrangements::user_id.eq(user_id))
             .first(conn)
             .optional()
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
     /// Deserialize the strategy and return it
     pub fn get_strategy(&self) -> Result<Option<ArrangementStrategy>, ErrorResponder> {
         if let Some(strategy) = &self.strategy {
             return Ok(Some(
-                serde_json::from_slice(strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res_rollback())?,
+                serde_json::from_slice(strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?,
             ));
         }
         Ok(None)
@@ -83,7 +83,7 @@ impl Arrangement {
         diesel::update(arrangements::table.filter(arrangements::id.eq(self.id)))
             .set(arrangements::strategy.eq(&self.strategy))
             .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())?;
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
         Ok(())
     }
 
@@ -92,7 +92,7 @@ impl Arrangement {
         arrangements::table
             .filter(arrangements::user_id.eq(user_id))
             .load(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
     /// List all users’ non-manual arrangements, providing the deserialized strategy, the list of groups and the list of dependant arrangements
     pub fn list_arrangements_and_groups(conn: &mut DBConn, user_id: u32) -> Result<Vec<ArrangementDetails>, ErrorResponder> {
@@ -126,7 +126,7 @@ impl Arrangement {
             .filter(groups::id.eq_any(groups_ids))
             .select(arrangements::all_columns)
             .load::<Arrangement>(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res_rollback())?)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?)
     }
 }
 #[derive(Clone)]

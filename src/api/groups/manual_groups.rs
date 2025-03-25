@@ -30,7 +30,7 @@ pub async fn create_manual_group(db: &State<DBPool>, user: User, request: Json<C
         // Verify the arrangement is manual and owned by the user
         let arrangement = Arrangement::from_id_and_user_id(conn, request.arrangement_id, user.id)?;
         if arrangement.strategy.is_some() {
-            return Err(ErrorType::GroupIsNotManual.res());
+            return Err(ErrorType::GroupIsNotManual.res_no_rollback());
         }
 
         let group = Group::insert(conn, request.arrangement_id, request.name.clone(), false)?;
@@ -48,7 +48,7 @@ pub async fn add_pictures_to_group(db: &State<DBPool>, user: User, request: Json
         // Verify the arrangement is manual and owned by the user
         let arrangement = Arrangement::from_id_and_user_id(conn, request.arrangement_id, user.id)?;
         if arrangement.strategy.is_some() {
-            return Err(ErrorType::GroupIsNotManual.res());
+            return Err(ErrorType::GroupIsNotManual.res_no_rollback());
         }
         // Get the group and verify it belongs to the arrangement
         Group::add_pictures(conn, request.group_id, request.picture_ids.clone())?;
@@ -66,7 +66,7 @@ pub async fn remove_pictures_from_group(db: &State<DBPool>, user: User, request:
         // Verify the arrangement is manual and owned by the user
         let arrangement = Arrangement::from_id_and_user_id(conn, request.arrangement_id, user.id)?;
         if arrangement.strategy.is_some() {
-            return Err(ErrorType::GroupIsNotManual.res());
+            return Err(ErrorType::GroupIsNotManual.res_no_rollback());
         }
         // Get the group and verify it belongs to the arrangement
         let group = Group::from_id_and_arrangement(conn, request.group_id, request.arrangement_id)?;

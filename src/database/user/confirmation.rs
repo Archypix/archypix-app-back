@@ -60,7 +60,7 @@ impl Confirmation {
                     warn!("Confirmation token already exists, trying again.");
                     return Confirmation::insert_confirmation(conn, user_id, action, device_info, redirect_url, try_count + 1);
                 }
-                ErrorType::DatabaseError("Failed to insert confirmation".to_string(), e).res_err_rollback()
+                ErrorType::DatabaseError("Failed to insert confirmation".to_string(), e).res_err()
             })
     }
     pub fn check_code_and_mark_as_used(
@@ -77,16 +77,16 @@ impl Confirmation {
             .filter(confirmations::dsl::code_token.eq(code_token))
             .first::<Confirmation>(conn)
             .optional()
-            .map_err(|e| ErrorType::DatabaseError("Failed to get confirmation".to_string(), e).res_rollback())?;
+            .map_err(|e| ErrorType::DatabaseError("Failed to get confirmation".to_string(), e).res())?;
         if let Some(mut confirmation) = confirmation {
             if confirmation.used {
-                return ErrorType::ConfirmationAlreadyUsed.res_err();
+                return ErrorType::ConfirmationAlreadyUsed.res_err_no_rollback();
             }
             if confirmation.date < Utc::now().naive_utc() - Duration::minutes(max_minutes) {
-                return ErrorType::ConfirmationExpired.res_err();
+                return ErrorType::ConfirmationExpired.res_err_no_rollback();
             }
             if confirmation.code_trials >= 3 {
-                return ErrorType::ConfirmationTooManyAttempts.res_err();
+                return ErrorType::ConfirmationTooManyAttempts.res_err_no_rollback();
             }
             if confirmation.code != *code {
                 confirmation.code_trials += 1;
@@ -96,14 +96,14 @@ impl Confirmation {
                     .filter(confirmations::dsl::code_token.eq(code_token))
                     .set((confirmations::dsl::code_trials.eq(confirmation.code_trials),))
                     .execute(conn)
-                    .map_err(|e| ErrorType::DatabaseError("Failed to update confirmation code trials".to_string(), e).res_rollback())?;
-                return ErrorType::ConfirmationNotFound.res_err();
+                    .map_err(|e| ErrorType::DatabaseError("Failed to update confirmation code trials".to_string(), e).res())?;
+                return ErrorType::ConfirmationNotFound.res_err_no_rollback();
             }
 
             confirmation.mark_as_used(conn)?;
             return Ok(confirmation.redirect_url);
         }
-        ErrorType::ConfirmationNotFound.res_err()
+        ErrorType::ConfirmationNotFound.res_err_no_rollback()
     }
     pub fn check_token_and_mark_as_used(
         conn: &mut DBConn,
@@ -118,18 +118,18 @@ impl Confirmation {
             .filter(confirmations::dsl::token.eq(token))
             .first::<Confirmation>(conn)
             .optional()
-            .map_err(|e| ErrorType::DatabaseError("Failed to get confirmation".to_string(), e).res_rollback())?;
+            .map_err(|e| ErrorType::DatabaseError("Failed to get confirmation".to_string(), e).res())?;
         if let Some(confirmation) = confirmation {
             if confirmation.used {
-                return ErrorType::ConfirmationAlreadyUsed.res_err();
+                return ErrorType::ConfirmationAlreadyUsed.res_err_no_rollback();
             }
             if confirmation.date < Utc::now().naive_utc() - Duration::minutes(max_minutes) {
-                return ErrorType::ConfirmationExpired.res_err();
+                return ErrorType::ConfirmationExpired.res_err_no_rollback();
             }
             confirmation.mark_as_used(conn)?;
             return Ok(confirmation.redirect_url);
         }
-        ErrorType::ConfirmationNotFound.res_err()
+        ErrorType::ConfirmationNotFound.res_err_no_rollback()
     }
     pub fn mark_as_used(&self, conn: &mut DBConn) -> Result<(), ErrorResponder> {
         update(confirmations::table)
@@ -139,7 +139,7 @@ impl Confirmation {
             .set((confirmations::dsl::used.eq(true),))
             .execute(conn)
             .map(|_| ())
-            .map_err(|e| ErrorType::DatabaseError("Failed to mark confirmation as used".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to mark confirmation as used".to_string(), e).res())
     }
     pub fn mark_all_as_used(conn: &mut DBConn, user_id: &u32, action: ConfirmationAction) -> Result<(), ErrorResponder> {
         update(confirmations::table)
@@ -148,6 +148,6 @@ impl Confirmation {
             .set((confirmations::dsl::used.eq(true),))
             .execute(conn)
             .map(|_| ())
-            .map_err(|e| ErrorType::DatabaseError("Failed to mark all confirmations as used".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to mark all confirmations as used".to_string(), e).res())
     }
 }

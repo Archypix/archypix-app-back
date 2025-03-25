@@ -27,5 +27,5 @@ pub fn is_error_duplicate_key(error: &diesel::result::Error, key: &str) -> bool 
 pub fn get_last_inserted_id(conn: &mut DBConn) -> Result<u64, ErrorResponder> {
     select(last_insert_id())
         .get_result::<u64>(conn)
-        .map_err(|e| ErrorType::DatabaseError("Failed to get last insert id".to_string(), e).res_rollback())
+        .map_err(|e| ErrorType::DatabaseError("Failed to get last insert id".to_string(), e).res())
 }

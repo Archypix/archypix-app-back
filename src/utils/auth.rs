@@ -29,7 +29,7 @@ impl<'r> FromRequest<'r> for User {
         let user_id = User::get_id_from_headers(request);
         let auth_token = AuthToken::get_auth_token_from_headers(request);
         if user_id.is_none() || auth_token.is_none() {
-            return Outcome::Error((Status::Unauthorized, ErrorType::UserNotFound.res()));
+            return Outcome::Error((Status::Unauthorized, ErrorType::UserNotFound.res_no_rollback()));
         }
 
         let db: &DBPool = request.rocket().state::<DBPool>().unwrap();
@@ -39,10 +39,10 @@ impl<'r> FromRequest<'r> for User {
 
         if let Some((user, auth)) = result.ok().flatten() {
             if user.status == UserStatus::Unconfirmed {
-                return Outcome::Error((Status::Unauthorized, ErrorType::UserUnconfirmed.res()));
+                return Outcome::Error((Status::Unauthorized, ErrorType::UserUnconfirmed.res_no_rollback()));
             }
             if user.status == UserStatus::Banned {
-                return Outcome::Error((Status::Unauthorized, ErrorType::UserBanned.res()));
+                return Outcome::Error((Status::Unauthorized, ErrorType::UserBanned.res_no_rollback()));
             }
 
             let result = auth.update_last_use_date(conn);
@@ -51,7 +51,7 @@ impl<'r> FromRequest<'r> for User {
             }
             return Outcome::Success(user);
         }
-        Outcome::Error((Status::Unauthorized, ErrorType::UserNotFound.res()))
+        Outcome::Error((Status::Unauthorized, ErrorType::UserNotFound.res_no_rollback()))
     }
 }
 /// OpenAPI documentation for the User request guard.

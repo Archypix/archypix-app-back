@@ -30,7 +30,7 @@ pub enum ErrorResponder {
 impl From<Error> for ErrorResponder {
     fn from(value: Error) -> Self {
         // Rollback all uncaught errors
-        ErrorType::DatabaseError("Diesel error".to_string(), value).res_rollback()
+        ErrorType::DatabaseError("Diesel error".to_string(), value).res()
     }
 }
 impl ErrorResponder {
@@ -140,23 +140,25 @@ pub enum ErrorType {
     // Groups
     GroupIsNotManual,
     ArrangementNotFound,
+    // Tags
+    TagNotFound,
 }
 
 impl ErrorType {
     /// Convert to a result of [`ErrorResponder`] without Diesel transaction rollback
-    pub fn res_err<T>(self) -> Result<T, ErrorResponder> {
+    pub fn res_err_no_rollback<T>(self) -> Result<T, ErrorResponder> {
         Err(self.to_responder(false))
     }
     /// Convert to a result of [`ErrorResponder`] with Diesel transaction rollback
-    pub fn res_err_rollback<T>(self) -> Result<T, ErrorResponder> {
+    pub fn res_err<T>(self) -> Result<T, ErrorResponder> {
         Err(self.to_responder(true))
     }
     /// Convert to a [`ErrorResponder`] without Diesel transaction rollback
-    pub fn res(self) -> ErrorResponder {
+    pub fn res_no_rollback(self) -> ErrorResponder {
         self.to_responder(false)
     }
     /// Convert to a [`ErrorResponder`] with Diesel transaction rollback
-    pub fn res_rollback(self) -> ErrorResponder {
+    pub fn res(self) -> ErrorResponder {
         self.to_responder(true)
     }
 
@@ -224,6 +226,7 @@ impl ErrorType {
                 rollback,
             )),
             ErrorType::ArrangementNotFound => ErrorResponder::NotFound(Self::create_response("Arrangement not found".to_string(), kind, rollback)),
+            ErrorType::TagNotFound => ErrorResponder::NotFound(Self::create_response("Tag not found".to_string(), kind, rollback)),
         }
     }
     /// Converts to an [`ErrorResponse`] struct
@@ -238,24 +241,24 @@ impl ErrorType {
 
 #[catch(400)]
 pub fn bad_request() -> ErrorResponder {
-    ErrorType::BadRequest.res()
+    ErrorType::BadRequest.res_no_rollback()
 }
 #[catch(401)]
 pub fn unauthorized() -> ErrorResponder {
-    ErrorType::Unauthorized.res()
+    ErrorType::Unauthorized.res_no_rollback()
 }
 #[catch(404)]
 pub fn not_found(req: &Request) -> ErrorResponder {
-    ErrorType::NotFound(req.uri().to_string()).res()
+    ErrorType::NotFound(req.uri().to_string()).res_no_rollback()
 }
 /// When a JSON value type is incorrect
 #[catch(422)]
 pub fn unprocessable_entity() -> ErrorResponder {
-    ErrorType::UnprocessableEntity.res()
+    ErrorType::UnprocessableEntity.res_no_rollback()
 }
 #[catch(500)]
 pub fn internal_error() -> ErrorResponder {
-    ErrorType::InternalError(String::from("Internal Error")).res()
+    ErrorType::InternalError(String::from("Internal Error")).res_no_rollback()
 }
 
 /// Diesel transaction encapsulation to handle rollback

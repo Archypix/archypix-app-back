@@ -35,7 +35,7 @@ impl User {
             .select(User::as_select())
             .first::<User>(conn)
             .optional()
-            .map_err(|e| ErrorType::DatabaseError("Failed to get user from id".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to get user from id".to_string(), e).res())
     }
     pub fn find_logged_in(conn: &mut DBConn, user_id: u32, auth_token: Vec<u8>) -> Result<(User, AuthToken), ErrorResponder> {
         User::find_logged_in_opt(conn, user_id, auth_token).and_then(|data| data.ok_or_else(|| ErrorType::UserNotFound.res()))
@@ -48,7 +48,7 @@ impl User {
             .select((User::as_select(), Option::<AuthToken>::as_select()))
             .first::<(User, Option<AuthToken>)>(conn)
             .optional()
-            .map_err(|e| ErrorType::DatabaseError("Failed to get user and auth token".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to get user and auth token".to_string(), e).res())
             .map(|data| data.and_then(|(user, auth)| auth.map(|auth| (user, auth))))
     }
 
@@ -58,7 +58,7 @@ impl User {
             .select(User::as_select())
             .first::<User>(conn)
             .optional()
-            .map_err(|e| ErrorType::DatabaseError("Failed to get user from email".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to get user from email".to_string(), e).res())
     }
 
     pub(crate) fn create_user(conn: &mut DBConn, name: &str, email: &str, password: &str) -> Result<u32, ErrorResponder> {
@@ -77,7 +77,7 @@ impl User {
                     users::dsl::creation_date.eq(chrono::Utc::now().naive_utc()),
                 ))
                 .execute(conn)
-                .map_err(|e| ErrorType::DatabaseError("Failed to update user name and password.".to_string(), e).res_rollback())?;
+                .map_err(|e| ErrorType::DatabaseError("Failed to update user name and password.".to_string(), e).res())?;
 
             // Only the latest singup confirmation is valid
             Confirmation::mark_all_as_used(conn, &user.id, ConfirmationAction::Signup)?;
@@ -92,7 +92,7 @@ impl User {
                 users::dsl::password_hash.eq(bcrypt::hash(password).unwrap()),
             ))
             .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res())
             .and_then(|_| get_last_inserted_id(conn).map(|id| id as u32))
     }
 
@@ -104,7 +104,7 @@ impl User {
             .filter(users::dsl::id.eq(user_id))
             .set(users::dsl::status.eq(status))
             .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError("Failed to update user status".to_string(), e).res_rollback())?;
+            .map_err(|e| ErrorType::DatabaseError("Failed to update user status".to_string(), e).res())?;
         Ok(())
     }
 

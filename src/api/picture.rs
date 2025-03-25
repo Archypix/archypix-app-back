@@ -70,7 +70,7 @@ pub async fn add_picture(
         // Saving the file
         if let Err(e) = upload.file.persist_to(Path::new(ORIGINAL_TEMP_DIR).join(temp_file_name.clone())).await {
             error!("{:?}", e);
-            return ErrorType::InternalError(format!("Unable to save file to {}", ORIGINAL_TEMP_DIR)).res_err();
+            return ErrorType::InternalError(format!("Unable to save file to {}", ORIGINAL_TEMP_DIR)).res_err_no_rollback();
         }
         let path = upload.file.path().unwrap();
 
@@ -170,7 +170,7 @@ pub async fn get_picture(
         Picture::is_picture_publicly_shared(conn, picture_id)?
     };
     if !access_allowed {
-        return Err(ErrorType::Unauthorized.res());
+        return Err(ErrorType::Unauthorized.res_no_rollback());
     }
 
     let picture_stream = picture_storer.get_picture(format, picture_id).await?;

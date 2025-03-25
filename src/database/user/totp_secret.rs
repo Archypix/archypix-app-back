@@ -23,7 +23,7 @@ impl TOTPSecret {
             .values((totp_secrets::dsl::user_id.eq(user_id), totp_secrets::dsl::secret.eq(secret)))
             .execute(conn)
             .map(|_| ())
-            .map_err(|e| ErrorType::DatabaseError("Failed to insert TOTP secret".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to insert TOTP secret".to_string(), e).res())
     }
     pub fn has_user_totp(conn: &mut DBConn, user_id: &u32) -> Result<bool, ErrorResponder> {
         totp_secrets::table
@@ -32,14 +32,14 @@ impl TOTPSecret {
             .first::<u32>(conn)
             .optional()
             .map(|opt| opt.is_some())
-            .map_err(|e| ErrorType::DatabaseError("Failed to check if user has TOTP".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to check if user has TOTP".to_string(), e).res())
     }
     pub fn get_user_totp_secrets(conn: &mut DBConn, user_id: &u32) -> Result<Vec<TOTPSecret>, ErrorResponder> {
         totp_secrets::table
             .filter(totp_secrets::dsl::user_id.eq(user_id))
             .select(TOTPSecret::as_select())
             .load::<TOTPSecret>(conn)
-            .map_err(|e| ErrorType::DatabaseError("Failed to get user TOTP secrets".to_string(), e).res_rollback())
+            .map_err(|e| ErrorType::DatabaseError("Failed to get user TOTP secrets".to_string(), e).res())
     }
     pub fn check_user_totp(conn: &mut DBConn, user_id: &u32, code: &str) -> Result<bool, ErrorResponder> {
         let secrets = TOTPSecret::get_user_totp_secrets(conn, user_id)?;
