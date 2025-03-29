@@ -21,7 +21,6 @@ pub struct TagGroup {
     pub user_id: u32,
     pub name: String,
     pub multiple: bool,
-    pub default_tag_id: Option<u32>,
     pub required: bool,
 }
 
@@ -32,7 +31,6 @@ impl TagGroup {
                 tag_groups::user_id.eq(tag_group.user_id),
                 tag_groups::name.eq(&tag_group.name.clone()),
                 tag_groups::multiple.eq(tag_group.multiple),
-                tag_groups::default_tag_id.eq(tag_group.default_tag_id),
                 tag_groups::required.eq(tag_group.required),
             ))
             .execute(conn)
@@ -46,7 +44,6 @@ impl TagGroup {
             .set((
                 tag_groups::name.eq(&tag_group.name),
                 tag_groups::multiple.eq(tag_group.multiple),
-                tag_groups::default_tag_id.eq(tag_group.default_tag_id),
                 tag_groups::required.eq(tag_group.required),
             ))
             .execute(conn)

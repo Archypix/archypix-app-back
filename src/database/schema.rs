@@ -100,7 +100,6 @@ table! {
         user_id -> Unsigned<Integer>,
         name -> Varchar,
         multiple -> Bool,
-        default_tag_id -> Nullable<Unsigned<Integer>>,
         required -> Bool
     }
 }
