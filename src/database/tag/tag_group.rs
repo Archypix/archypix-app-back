@@ -4,12 +4,15 @@ use crate::database::tag::tag::Tag;
 use crate::database::user::user::User;
 use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use diesel::dsl::{exists, not};
+use diesel::JoinOnDsl;
 use diesel::QueryDsl;
 use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
 use diesel::{ExpressionMethods, OptionalExtension};
 use rocket::serde::json::Json;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Serialize, Deserialize, JsonSchema, Debug, PartialEq, Eq, Hash, Clone)]
 #[diesel(primary_key(id))]
@@ -22,6 +25,12 @@ pub struct TagGroup {
     pub name: String,
     pub multiple: bool,
     pub required: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct TagGroupWithTags {
+    pub tag_group: TagGroup,
+    pub tags: Vec<Tag>,
 }
 
 impl TagGroup {
@@ -51,20 +60,30 @@ impl TagGroup {
         Ok(tag_group)
     }
 
-    /// List all user’s tag groups
+    /// List all user's tag groups
     pub fn list_tag_groups(conn: &mut DBConn, user_id: u32) -> Result<Vec<TagGroup>, ErrorResponder> {
         tag_groups::table
             .filter(tag_groups::user_id.eq(user_id))
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    /// List all user’s tag groups and associated tags
+    /// List all user's tag groups and associated tags
     pub fn list_all_tags(conn: &mut DBConn, user_id: u32) -> Result<Vec<(TagGroup, Tag)>, ErrorResponder> {
         tag_groups::table
             .inner_join(tags::table)
             .filter(tag_groups::user_id.eq(user_id))
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    /// List all user's tag groups and associated tags, as a Vec<TagGroupWithTags>
+    pub fn list_all_tags_as_tag_group_with_tags(conn: &mut DBConn, user_id: u32) -> Result<Vec<TagGroupWithTags>, ErrorResponder> {
+        let tags = TagGroup::list_all_tags(conn, user_id)?;
+        // Create first a HashMap, and then map it to TagGroupWithTags.
+        let mut map: HashMap<TagGroup, Vec<Tag>> = HashMap::new();
+        for (a, b) in tags {
+            map.entry(a).or_insert_with(Vec::new).push(b);
+        }
+        Ok(map.into_iter().map(|(tag_group, tags)| TagGroupWithTags { tag_group, tags }).collect())
     }
 
     pub fn from_id(conn: &mut DBConn, id: u32) -> Result<TagGroup, ErrorResponder> {
@@ -85,5 +104,36 @@ impl TagGroup {
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
         Ok(deleted)
+    }
+
+    /// Add a default tag to all pictures that don't have any tag from this tag group
+    pub fn add_default_tag_to_pictures_without_tag(
+        conn: &mut DBConn,
+        default_tag_id: u32,
+        tag_group_id: u32,
+        user_id: u32,
+    ) -> Result<(), ErrorResponder> {
+        // Get all pictures owned by the user that don't have any tag from this tag group
+        let pictures_without_tag = pictures::table
+            .filter(pictures::owner_id.eq(user_id))
+            .filter(not(exists(
+                pictures_tags::table
+                    .inner_join(tags::table.on(tags::id.eq(pictures_tags::tag_id)))
+                    .filter(pictures_tags::picture_id.eq(pictures::id))
+                    .filter(tags::tag_group_id.eq(tag_group_id)),
+            )))
+            .select(pictures::id)
+            .load::<u64>(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+
+        // Add the default tag to all these pictures
+        for picture_id in pictures_without_tag {
+            diesel::insert_into(pictures_tags::table)
+                .values((pictures_tags::picture_id.eq(picture_id), pictures_tags::tag_id.eq(default_tag_id)))
+                .execute(conn)
+                .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+        }
+
+        Ok(())
     }
 }

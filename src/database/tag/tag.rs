@@ -11,7 +11,7 @@ use rocket::yansi::Paint;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Selectable, Identifiable, Insertable, Associations, Serialize, Deserialize, JsonSchema, Debug, PartialEq)]
+#[derive(Queryable, Selectable, Identifiable, Insertable, Associations, Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
 #[diesel(primary_key(id))]
 #[diesel(belongs_to(TagGroup))]
 #[diesel(table_name = tags)]

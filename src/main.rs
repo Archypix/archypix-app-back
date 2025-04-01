@@ -18,9 +18,8 @@ use crate::api::picture::{
 };
 use crate::api::query_pictures::{okapi_add_operation_for_query_pictures_, query_pictures};
 use crate::api::tags::{
-    delete_tag, delete_tag_group, edit_tag, edit_tag_group, get_tags, new_tag, new_tag_group, okapi_add_operation_for_delete_tag_,
-    okapi_add_operation_for_delete_tag_group_, okapi_add_operation_for_edit_tag_, okapi_add_operation_for_edit_tag_group_,
-    okapi_add_operation_for_get_tags_, okapi_add_operation_for_new_tag_, okapi_add_operation_for_new_tag_group_,
+    delete_tag_group, get_tags, new_tag_group, okapi_add_operation_for_delete_tag_group_, okapi_add_operation_for_get_tags_,
+    okapi_add_operation_for_new_tag_group_, okapi_add_operation_for_patch_tag_group_, patch_tag_group,
 };
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
@@ -124,11 +123,8 @@ async fn rocket() -> _ {
                 // Tags
                 get_tags,
                 new_tag_group,
-                new_tag,
-                edit_tag_group,
-                edit_tag,
+                patch_tag_group,
                 delete_tag_group,
-                delete_tag,
                 // Groups
                 create_manual_group,
                 add_pictures_to_group,
