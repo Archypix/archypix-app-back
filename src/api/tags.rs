@@ -121,41 +121,49 @@ pub async fn patch_tag_group(data: Json<PatchTagGroupRequest>, db: &State<DBPool
         // 1. Edit the tag group
         let updated_tag_group = TagGroup::patch(conn, data.edited_tag_group.clone(), user.id)?;
 
-        // 2. Delete tags
+        // 2. Delete tags to delete
         for tag_id in &data.deleted_tags_ids {
-            let tag = old_tag_group_tags
-                .iter()
-                .find(|t| t.id == *tag_id)
-                .ok_or_else(|| ErrorType::TagNotFound.res())?;
+            if !old_tag_group_tags.iter().any(|t| t.id == *tag_id) {
+                return ErrorType::TagNotFound.res_err();
+            }
             Tag::delete(conn, *tag_id)?;
         }
 
         // 3. Edit existing tags
-        let mut updated_tags = Vec::new();
+        let mut updated_or_new_tags = Vec::new();
         for tag in data.edited_tags.clone() {
-            let old_tag = old_tag_group_tags
-                .iter()
-                .find(|t| t.id == tag.id)
-                .ok_or_else(|| ErrorType::TagNotFound.res())?;
-            updated_tags.push(Tag::patch(conn, tag)?);
+            if !old_tag_group_tags.iter().any(|t| t.id == tag.id) {
+                return ErrorType::TagNotFound.res_err();
+            }
+            updated_or_new_tags.push(Tag::patch(conn, tag)?);
         }
 
         // 4. Create new tags
         for mut tag in data.new_tags.clone() {
             tag.tag_group_id = updated_tag_group.id.unwrap();
-            updated_tags.push(Tag::insert(conn, tag)?);
+            updated_or_new_tags.push(Tag::insert(conn, tag)?);
         }
 
         // 5. If the group is required, add the first default tag to all pictures that don't have any tag from this tag group
         if updated_tag_group.required {
-            if let Some(default_tag) = updated_tags.iter().find(|tag| tag.is_default) {
+            if let Some(default_tag) = updated_or_new_tags.iter().find(|tag| tag.is_default) {
                 TagGroup::add_default_tag_to_pictures_without_tag(conn, default_tag.id, updated_tag_group.id.unwrap(), user.id)?;
             }
         }
 
+        // 6. Gather all Tags : all old tags that are not deleted or edited, and all updated/new tags
+        let mut new_tag_group_tags = old_tag_group_tags
+            .into_iter()
+            .filter(|tag| !data.deleted_tags_ids.contains(&tag.id) && !data.edited_tags.iter().any(|edited_tag| edited_tag.id == tag.id))
+            .collect::<Vec<Tag>>();
+        new_tag_group_tags.append(&mut updated_or_new_tags);
+
+        // 7. Update arrangements strategies if needed
+        // TODO: update arrangements depending on tags.
+
         Ok(Json(TagGroupWithTags {
             tag_group: updated_tag_group,
-            tags: updated_tags,
+            tags: new_tag_group_tags,
         }))
     })
 }

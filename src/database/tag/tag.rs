@@ -75,5 +75,6 @@ impl Tag {
         diesel::delete(tags::table.filter(tags::id.eq(id)))
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+        // TODO: delete all pictures_tags with this tag
     }
 }
