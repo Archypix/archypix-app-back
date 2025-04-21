@@ -57,6 +57,7 @@ impl From<Metadata> for Picture {
             exposure_time_den: exposure_time.map(|r| *r.denom() as u32),
             iso_speed: extract_iso(&metadata),
             f_number: rational_to_big_decimal(metadata.get_tag_rational("Exif.Photo.FNumber"), 1),
+            size_ko: 0,
         }
     }
 }
@@ -92,6 +93,7 @@ impl From<Option<Metadata>> for Picture {
             exposure_time_den: None,
             iso_speed: None,
             f_number: None,
+            size_ko: 0,
         }
     }
 }

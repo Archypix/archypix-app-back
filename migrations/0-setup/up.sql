@@ -63,11 +63,11 @@ CREATE TABLE friends
 CREATE TABLE tag_groups
 (
     CONSTRAINT PK_tag_groups PRIMARY KEY (id),
-    id             INT UNSIGNED AUTO_INCREMENT,
-    user_id        INT UNSIGNED NOT NULL,
-    name           VARCHAR(32)  NOT NULL,
-    multiple       BOOLEAN      NOT NULL DEFAULT FALSE,
-    required       BOOLEAN      NOT NULL DEFAULT FALSE,
+    id       INT UNSIGNED AUTO_INCREMENT,
+    user_id  INT UNSIGNED NOT NULL,
+    name     VARCHAR(32)  NOT NULL,
+    multiple BOOLEAN      NOT NULL DEFAULT FALSE,
+    required BOOLEAN      NOT NULL DEFAULT FALSE,
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
@@ -86,7 +86,7 @@ CREATE TABLE pictures
 (
     CONSTRAINT PK_photos PRIMARY KEY (id),
     id                BIGINT UNSIGNED AUTO_INCREMENT,
-    name    VARCHAR(64) NOT NULL,
+    name    VARCHAR(64)  NOT NULL,
     comment TEXT,
     owner_id          INT UNSIGNED                                                                                                                                             NOT NULL,
     author_id         INT UNSIGNED                                                                                                                                             NOT NULL,
@@ -107,6 +107,7 @@ CREATE TABLE pictures
     exposure_time_den INT UNSIGNED,
     iso_speed         INT UNSIGNED,
     f_number          DECIMAL(4, 1),
+    size_ko INT UNSIGNED NOT NULL,
     FOREIGN KEY (owner_id) REFERENCES users (id),
     FOREIGN KEY (author_id) REFERENCES users (id)
 );

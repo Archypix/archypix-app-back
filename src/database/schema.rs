@@ -164,6 +164,7 @@ table! {
         exposure_time_den -> Nullable<Unsigned<Integer>>,
         iso_speed -> Nullable<Unsigned<Integer>>,
         f_number -> Nullable<Decimal>,
+        size_ko -> Unsigned<Integer>,
     }
 }
 joinable!(pictures -> users (owner_id));

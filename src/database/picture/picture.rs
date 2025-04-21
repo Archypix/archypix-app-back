@@ -58,6 +58,7 @@ pub struct Picture {
     pub iso_speed: Option<u32>,
     /// 1 decimal, maximum 1000.0
     pub f_number: Option<BigDecimal>,
+    pub size_ko: u32,
 }
 #[derive(Debug, PartialEq, JsonSchema, Serialize)]
 pub struct PictureDetails {
@@ -302,11 +303,18 @@ impl Picture {
         Ok(shared_count > 0)
     }
 
-    pub fn insert(conn: &mut DBConn, user_id: u32, name: String, metadata: Option<rexiv2::Metadata>) -> Result<Picture, ErrorResponder> {
+    pub fn insert(
+        conn: &mut DBConn,
+        user_id: u32,
+        name: String,
+        metadata: Option<rexiv2::Metadata>,
+        size_ko: u32,
+    ) -> Result<Picture, ErrorResponder> {
         let mut picture = Picture::from(metadata);
         picture.owner_id = user_id;
         picture.author_id = user_id;
         picture.name = name;
+        picture.size_ko = size_ko;
 
         let p = picture.clone();
         let _ = insert_into(pictures::table)
@@ -332,6 +340,7 @@ impl Picture {
                 pictures::dsl::exposure_time_den.eq(p.exposure_time_den),
                 pictures::dsl::iso_speed.eq(p.iso_speed),
                 pictures::dsl::f_number.eq(p.f_number),
+                pictures::dsl::size_ko.eq(p.size_ko),
             ))
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res())?;

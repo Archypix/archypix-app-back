@@ -113,6 +113,10 @@ impl Arrangement {
             })
             .collect::<Result<Vec<ArrangementDetails>, ErrorResponder>>()?;
 
+        if arrangements.len() == 0 {
+            return Ok(vec![]);
+        }
+
         for i in 0..arrangements.len() - 1 {
             let cloned_arrangements = arrangements.clone();
             arrangements[i].set_dependant_arrangements_auto(&cloned_arrangements);

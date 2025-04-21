@@ -24,6 +24,7 @@ use rocket_okapi::{openapi, JsonSchema};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
 use std::collections::HashSet;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use strum::IntoEnumIterator;
 use tokio::task;
@@ -70,16 +71,32 @@ pub async fn add_picture(
         // Saving the file
         if let Err(e) = upload.file.persist_to(Path::new(ORIGINAL_TEMP_DIR).join(temp_file_name.clone())).await {
             error!("{:?}", e);
-            return ErrorType::InternalError(format!("Unable to save file to {}", ORIGINAL_TEMP_DIR)).res_err_no_rollback();
+            return ErrorType::InternalError(format!("Unable to save file to {}", ORIGINAL_TEMP_DIR)).res_err();
         }
         let path = upload.file.path().unwrap();
+
+        // Calculate file size (Rounding up)
+        let file_size_o = path
+            .metadata()
+            .map_err(|e| ErrorType::InternalError(format!("Unable to get file metadata: {}", e.to_string())).res())?
+            .size();
+        let mut file_size_ko = ((file_size_o + 1023) / 1024) as u32;
+        if file_size_ko > 10_000_000 {
+            return ErrorType::InvalidInput(format!("File size is too big: {} Ko", file_size_ko)).res_err();
+        }
+        if file_size_ko == 0 {
+            file_size_ko = 1;
+        }
+        if file_size_ko > (user.storage_limit_mo as u64 * 1024u64 - user.storage_count_ko) as u32 {
+            return ErrorType::InvalidInput(format!("File size is too big: {} Ko", file_size_ko)).res_err();
+        }
 
         // Read EXIF metadata
         let meta = rexiv2::Metadata::new_from_path(path).ok();
 
         // Database operations
         let picture = err_transaction(conn, |conn| {
-            let picture = Picture::insert(conn, user.id, file_name.clone(), meta)?;
+            let picture = Picture::insert(conn, user.id, file_name.clone(), meta, file_size_ko)?;
 
             // TODO: add to default tags
 
