@@ -1,8 +1,11 @@
 use crate::api::picture::ListPictureData;
 use crate::api::query_pictures::{PictureFilter, PictureSort, PicturesQuery};
 use crate::database::database::DBConn;
+use crate::database::picture::picture_tag::PictureTag;
+use crate::database::picture::rating::Rating;
 use crate::database::schema::PictureOrientation;
 use crate::database::schema::*;
+use crate::database::tag::tag::Tag;
 use crate::database::user::user::User;
 use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
@@ -15,14 +18,14 @@ use diesel::mysql::Mysql;
 use diesel::query_builder::QueryFragment;
 use diesel::query_dsl::InternalJoinDsl;
 use diesel::sql_types::{BigInt, Binary, Bool, Datetime, Decimal, Integer, SmallInt, Text, TinyInt, Unsigned, VarChar, Varchar};
-use diesel::JoinOnDsl;
 use diesel::QueryDsl;
 use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
 use diesel::{BoolExpressionMethods, ExpressionMethods};
+use diesel::{JoinOnDsl, NullableExpressionMethods, OptionalExtension, SelectableHelper};
 use diesel_derives::Insertable;
 use rocket::serde::json::Json;
 use rocket_okapi::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Insertable, JsonSchema, Serialize, Debug, PartialEq, Clone)]
 #[diesel(primary_key(id))]
@@ -55,6 +58,12 @@ pub struct Picture {
     pub iso_speed: Option<u32>,
     /// 1 decimal, maximum 1000.0
     pub f_number: Option<BigDecimal>,
+}
+#[derive(Debug, PartialEq, JsonSchema, Serialize)]
+pub struct PictureDetails {
+    pub picture: Picture,
+    pub tags_ids: Vec<u32>,
+    pub ratings: Vec<Rating>,
 }
 
 impl Picture {
@@ -330,5 +339,33 @@ impl Picture {
         picture.id = get_last_inserted_id(conn)?;
 
         Ok(picture)
+    }
+
+    pub fn get_pictures_details(conn: &mut DBConn, user_id: u32, picture_ids: Vec<u64>) -> Result<Vec<Picture>, ErrorResponder> {
+        let pictures: Vec<Picture> = pictures::table
+            // Join with shared pictures
+            .left_join(
+                groups_pictures::table
+                    .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
+                    .on(groups_pictures::dsl::picture_id.eq(pictures::dsl::id)),
+            )
+            // Filter allowed pictures
+            .filter(shared_groups::dsl::user_id.eq(user_id).or(pictures::dsl::owner_id.eq(user_id)))
+            // Filter requested pictures
+            .filter(pictures::dsl::id.eq_any(picture_ids))
+            .select(Picture::as_select())
+            .load(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get pictures details".to_string(), e).res())?;
+
+        Ok(pictures)
+    }
+
+    pub fn get_picture_details(conn: &mut DBConn, user_id: u32, picture_id: u64) -> Result<PictureDetails, ErrorResponder> {
+        let picture = Self::get_pictures_details(conn, user_id, vec![picture_id])?
+            .pop()
+            .ok_or_else(|| ErrorType::PictureNotFound.res())?;
+        let ratings = Rating::from_picture_id_including_friends(conn, picture_id, user_id)?;
+        let tags_ids = PictureTag::get_picture_tags(conn, picture_id, user_id)?;
+        Ok(PictureDetails { picture, tags_ids, ratings })
     }
 }

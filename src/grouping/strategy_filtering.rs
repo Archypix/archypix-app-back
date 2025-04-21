@@ -128,15 +128,39 @@ impl FilterType {
             FilterType::ExifEqualTo(exif) => match exif {
                 ExifDataTypeValue::CreationDate(dates) => Box::new(pictures::creation_date.eq_any(dates)),
                 ExifDataTypeValue::EditionDate(dates) => Box::new(pictures::edition_date.eq_any(dates)),
-                ExifDataTypeValue::Latitude(latitudes) => Box::new(pictures::latitude.eq_any(latitudes)),
-                ExifDataTypeValue::Longitude(longitudes) => Box::new(pictures::longitude.eq_any(longitudes)),
-                ExifDataTypeValue::Altitude(altitudes) => Box::new(pictures::altitude.eq_any(altitudes)),
+                ExifDataTypeValue::Latitude(latitudes) => Box::new(
+                    pictures::latitude
+                        .is_not_null()
+                        .and(pictures::latitude.assume_not_null().eq_any(latitudes)),
+                ),
+                ExifDataTypeValue::Longitude(longitudes) => Box::new(
+                    pictures::longitude
+                        .is_not_null()
+                        .and(pictures::longitude.assume_not_null().eq_any(longitudes)),
+                ),
+                ExifDataTypeValue::Altitude(altitudes) => Box::new(
+                    pictures::altitude
+                        .is_not_null()
+                        .and(pictures::altitude.assume_not_null().eq_any(altitudes)),
+                ),
                 ExifDataTypeValue::Orientation(orientations) => Box::new(pictures::orientation.eq_any(orientations)),
                 ExifDataTypeValue::Width(widths) => Box::new(pictures::width.eq_any(widths)),
                 ExifDataTypeValue::Height(heights) => Box::new(pictures::height.eq_any(heights)),
-                ExifDataTypeValue::CameraBrand(brands) => Box::new(pictures::camera_brand.eq_any(brands)),
-                ExifDataTypeValue::CameraModel(models) => Box::new(pictures::camera_model.eq_any(models)),
-                ExifDataTypeValue::FocalLength(focal_lengths) => Box::new(pictures::focal_length.eq_any(focal_lengths)),
+                ExifDataTypeValue::CameraBrand(brands) => Box::new(
+                    pictures::camera_brand
+                        .is_not_null()
+                        .and(pictures::camera_brand.assume_not_null().eq_any(brands)),
+                ),
+                ExifDataTypeValue::CameraModel(models) => Box::new(
+                    pictures::camera_model
+                        .is_not_null()
+                        .and(pictures::camera_model.assume_not_null().eq_any(models)),
+                ),
+                ExifDataTypeValue::FocalLength(focal_lengths) => Box::new(
+                    pictures::focal_length
+                        .is_not_null()
+                        .and(pictures::focal_length.assume_not_null().eq_any(focal_lengths)),
+                ),
                 ExifDataTypeValue::ExposureTime(exposure_times) => {
                     let mut or_conditions: PicturesBoxedExpr = Box::new(always_false.clone());
                     for (num, den) in exposure_times {
@@ -150,24 +174,56 @@ impl FilterType {
                         pictures::exposure_time_num
                             .is_not_null()
                             .and(pictures::exposure_time_den.is_not_null())
-                            .and(or_conditions),
+                            .and(or_conditions.assume_not_null()),
                     )
                 }
-                ExifDataTypeValue::IsoSpeed(iso_speeds) => Box::new(pictures::iso_speed.eq_any(iso_speeds)),
-                ExifDataTypeValue::FNumber(f_numbers) => Box::new(pictures::f_number.eq_any(f_numbers)),
+                ExifDataTypeValue::IsoSpeed(iso_speeds) => Box::new(
+                    pictures::iso_speed
+                        .is_not_null()
+                        .and(pictures::iso_speed.assume_not_null().eq_any(iso_speeds)),
+                ),
+                ExifDataTypeValue::FNumber(f_numbers) => Box::new(
+                    pictures::f_number
+                        .is_not_null()
+                        .and(pictures::f_number.assume_not_null().eq_any(f_numbers)),
+                ),
             },
             FilterType::ExifNotEqualTo(exif) => match exif {
                 ExifDataTypeValue::CreationDate(dates) => Box::new(not(pictures::creation_date.eq_any(dates))),
                 ExifDataTypeValue::EditionDate(dates) => Box::new(not(pictures::edition_date.eq_any(dates))),
-                ExifDataTypeValue::Latitude(latitudes) => Box::new(not(pictures::latitude.eq_any(latitudes))),
-                ExifDataTypeValue::Longitude(longitudes) => Box::new(not(pictures::longitude.eq_any(longitudes))),
-                ExifDataTypeValue::Altitude(altitudes) => Box::new(not(pictures::altitude.eq_any(altitudes))),
+                ExifDataTypeValue::Latitude(latitudes) => Box::new(
+                    pictures::latitude
+                        .is_null()
+                        .or(not(pictures::latitude.assume_not_null().eq_any(latitudes))),
+                ),
+                ExifDataTypeValue::Longitude(longitudes) => Box::new(
+                    pictures::longitude
+                        .is_null()
+                        .or(not(pictures::longitude.assume_not_null().eq_any(longitudes))),
+                ),
+                ExifDataTypeValue::Altitude(altitudes) => Box::new(
+                    pictures::altitude
+                        .is_null()
+                        .or(not(pictures::altitude.assume_not_null().eq_any(altitudes))),
+                ),
                 ExifDataTypeValue::Orientation(orientations) => Box::new(not(pictures::orientation.eq_any(orientations))),
                 ExifDataTypeValue::Width(widths) => Box::new(not(pictures::width.eq_any(widths))),
                 ExifDataTypeValue::Height(heights) => Box::new(not(pictures::height.eq_any(heights))),
-                ExifDataTypeValue::CameraBrand(brands) => Box::new(not(pictures::camera_brand.eq_any(brands))),
-                ExifDataTypeValue::CameraModel(models) => Box::new(not(pictures::camera_model.eq_any(models))),
-                ExifDataTypeValue::FocalLength(focal_lengths) => Box::new(not(pictures::focal_length.eq_any(focal_lengths))),
+                ExifDataTypeValue::CameraBrand(brands) => Box::new(
+                    pictures::camera_brand
+                        .is_null()
+                        .or(not(pictures::camera_brand.assume_not_null().eq_any(brands))),
+                ),
+                ExifDataTypeValue::CameraModel(models) => Box::new(
+                    pictures::camera_model
+                        .is_null()
+                        .or(not(pictures::camera_model.assume_not_null().eq_any(models))),
+                ),
+                ExifDataTypeValue::FocalLength(focal_lengths) => Box::new(
+                    pictures::focal_length
+                        .is_null()
+                        .or(not(pictures::focal_length.assume_not_null().eq_any(focal_lengths))),
+                ),
                 ExifDataTypeValue::ExposureTime(exposure_times) => {
                     let mut and_conditions: PicturesBoxedExpr =
                         Box::new(pictures::exposure_time_num.is_not_null().and(pictures::exposure_time_den.is_not_null()));
@@ -180,8 +236,16 @@ impl FilterType {
                     }
                     and_conditions
                 }
-                ExifDataTypeValue::IsoSpeed(iso_speeds) => Box::new(not(pictures::iso_speed.eq_any(iso_speeds))),
-                ExifDataTypeValue::FNumber(f_numbers) => Box::new(not(pictures::f_number.eq_any(f_numbers))),
+                ExifDataTypeValue::IsoSpeed(iso_speeds) => Box::new(
+                    pictures::iso_speed
+                        .is_null()
+                        .or(not(pictures::iso_speed.assume_not_null().eq_any(iso_speeds))),
+                ),
+                ExifDataTypeValue::FNumber(f_numbers) => Box::new(
+                    pictures::f_number
+                        .is_null()
+                        .or(not(pictures::f_number.assume_not_null().eq_any(f_numbers))),
+                ),
             },
             _ => Box::new(always_true),
         }

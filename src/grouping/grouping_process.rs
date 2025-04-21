@@ -60,7 +60,7 @@ pub fn group_new_pictures(
                     } else {
                         &pictures_ids
                     };
-                    let group_pictures = PictureTag::get_tag_pictures(conn, tag.id, pictures_to_group)?;
+                    let group_pictures = PictureTag::filter_pictures_from_tag(conn, tag.id, pictures_to_group)?;
                     if group_pictures.len() != 0 {
                         let (group_id, update) = tag_grouping.get_or_create_tag_group_id(conn, &tag, arrangement.arrangement.id)?;
                         update_strategy |= update;

@@ -13,7 +13,8 @@ use crate::api::groups::manual_groups::{
     okapi_add_operation_for_remove_pictures_from_group_, remove_pictures_from_group,
 };
 use crate::api::picture::{
-    add_picture, get_picture, list_pictures, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_,
+    add_picture, get_picture, get_picture_details, get_pictures_details, list_pictures, okapi_add_operation_for_add_picture_,
+    okapi_add_operation_for_get_picture_, okapi_add_operation_for_get_picture_details_, okapi_add_operation_for_get_pictures_details_,
     okapi_add_operation_for_list_pictures_,
 };
 use crate::api::query_pictures::{okapi_add_operation_for_query_pictures_, query_pictures};
@@ -120,6 +121,8 @@ async fn rocket() -> _ {
                 get_picture,
                 query_pictures,
                 list_pictures,
+                get_pictures_details,
+                get_picture_details,
                 // Tags
                 get_tags,
                 new_tag_group,

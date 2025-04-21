@@ -1,6 +1,6 @@
 use crate::api::query_pictures::{PictureFilter, PictureSort, PicturesQuery};
 use crate::database::database::{DBConn, DBPool};
-use crate::database::picture::picture::Picture;
+use crate::database::picture::picture::{Picture, PictureDetails};
 use crate::database::schema::pictures::{edition_date, width};
 use crate::database::user::user::User;
 use crate::grouping::grouping_process::group_new_pictures;
@@ -201,4 +201,24 @@ pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Res
 
     let pictures = Picture::query(conn, user.id, query)?;
     Ok(Json(pictures))
+}
+
+/// Get pictures details
+#[openapi(tag = "Picture")]
+#[post("/pictures_details", data = "<picture_ids>")]
+pub async fn get_pictures_details(db: &State<DBPool>, user: User, picture_ids: Json<Vec<u64>>) -> Result<Json<Vec<Picture>>, ErrorResponder> {
+    let conn: &mut DBConn = &mut db.get().unwrap();
+
+    let pictures = Picture::get_pictures_details(conn, user.id, picture_ids.into_inner())?;
+    Ok(Json(pictures))
+}
+
+/// Get picture details, includes tags and ratings
+#[openapi(tag = "Picture")]
+#[get("/picture_details/<picture_id>")]
+pub async fn get_picture_details(db: &State<DBPool>, user: User, picture_id: u64) -> Result<Json<PictureDetails>, ErrorResponder> {
+    let conn: &mut DBConn = &mut db.get().unwrap();
+
+    let picture = Picture::get_picture_details(conn, user.id, picture_id)?;
+    Ok(Json(picture))
 }

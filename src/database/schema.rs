@@ -10,6 +10,7 @@ define_sql_function! { fn inet6_aton(ip: Nullable<VarChar>) -> Nullable<Varbinar
 define_sql_function! { fn utc_timestamp() -> Datetime }
 
 #[derive(JsonSchema, Debug, PartialEq, Serialize, diesel_derive_enum::DbEnum)]
+#[DbValueStyle = "snake_case"]
 pub enum UserStatus {
     Unconfirmed,
     Normal,
@@ -46,7 +47,8 @@ table! {
 joinable!(auth_tokens -> users (user_id));
 allow_tables_to_appear_in_same_query!(auth_tokens, users);
 
-#[derive(JsonSchema, Debug, PartialEq, diesel_derive_enum::DbEnum, Deserialize, Serialize)]
+#[derive(JsonSchema, Debug, PartialEq, Deserialize, Serialize, diesel_derive_enum::DbEnum)]
+#[DbValueStyle = "snake_case"]
 pub enum ConfirmationAction {
     Signup,
     Signin,
@@ -122,7 +124,8 @@ allow_tables_to_appear_in_same_query!(tags, groups);
 allow_tables_to_appear_in_same_query!(tags, groups_pictures);
 allow_tables_to_appear_in_same_query!(tags, shared_groups);
 
-#[derive(Debug, PartialEq, JsonSchema, diesel_derive_enum::DbEnum, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, JsonSchema, Clone, Deserialize, Serialize, diesel_derive_enum::DbEnum)]
+#[DbValueStyle = "PascalCase"]
 pub enum PictureOrientation {
     Unspecified,
     Normal,
@@ -177,6 +180,7 @@ joinable!(pictures_tags -> pictures (picture_id));
 joinable!(pictures_tags -> tags (tag_id));
 allow_tables_to_appear_in_same_query!(pictures_tags, pictures);
 allow_tables_to_appear_in_same_query!(pictures_tags, tags);
+allow_tables_to_appear_in_same_query!(pictures_tags, tag_groups);
 allow_tables_to_appear_in_same_query!(pictures_tags, groups_pictures);
 allow_tables_to_appear_in_same_query!(pictures_tags, shared_groups);
 allow_tables_to_appear_in_same_query!(pictures_tags, groups);
@@ -304,3 +308,4 @@ joinable!(ratings -> users (user_id));
 joinable!(ratings -> pictures (picture_id));
 allow_tables_to_appear_in_same_query!(ratings, users);
 allow_tables_to_appear_in_same_query!(ratings, pictures);
+allow_tables_to_appear_in_same_query!(ratings, friends);
