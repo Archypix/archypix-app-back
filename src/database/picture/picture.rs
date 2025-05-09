@@ -149,6 +149,8 @@ impl Picture {
                     .eq(user_id) // Owned picture
                     .or(shared_groups::dsl::user_id.eq(user_id)), // Shared picture
             )
+            .select(Picture::as_select())
+            .distinct()
             .into_boxed();
 
         // Applying filters
@@ -363,6 +365,7 @@ impl Picture {
             // Filter requested pictures
             .filter(pictures::dsl::id.eq_any(picture_ids))
             .select(Picture::as_select())
+            .distinct()
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to get pictures details".to_string(), e).res())?;
 

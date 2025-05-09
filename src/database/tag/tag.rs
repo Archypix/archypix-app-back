@@ -71,10 +71,62 @@ impl Tag {
             .optional()
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
+    pub fn from_ids(conn: &mut DBConn, tag_ids: Vec<u32>) -> Result<Vec<Tag>, ErrorResponder> {
+        tags::table
+            .filter(tags::id.eq_any(tag_ids))
+            .load(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
     pub fn delete(conn: &mut DBConn, id: u32) -> Result<usize, ErrorResponder> {
+        // Delete all pictures with this tag
+        diesel::delete(pictures_tags::table.filter(pictures_tags::tag_id.eq(id)))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+
         diesel::delete(tags::table.filter(tags::id.eq(id)))
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
-        // TODO: delete all pictures_tags with this tag
+    }
+
+    pub fn add_pictures(conn: &mut DBConn, tag_id: u32, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+        let values: Vec<_> = picture_ids
+            .into_iter()
+            .map(|pic_id| (pictures_tags::tag_id.eq(tag_id), pictures_tags::picture_id.eq(pic_id)))
+            .collect();
+
+        diesel::insert_into(pictures_tags::table)
+            .values(&values)
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn add_pictures_batch(conn: &mut DBConn, tag_ids: Vec<u32>, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+        let values: Vec<_> = tag_ids
+            .iter()
+            .flat_map(|tag_id| {
+                picture_ids
+                    .iter()
+                    .map(move |pic_id| (pictures_tags::tag_id.eq(tag_id), pictures_tags::picture_id.eq(pic_id)))
+            })
+            .collect();
+
+        diesel::insert_into(pictures_tags::table)
+            .values(&values)
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+
+    pub fn remove_pictures(conn: &mut DBConn, tag_id: u32, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+        diesel::delete(pictures_tags::table)
+            .filter(pictures_tags::tag_id.eq(tag_id))
+            .filter(pictures_tags::picture_id.eq_any(picture_ids))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn remove_pictures_batch(conn: &mut DBConn, tag_ids: Vec<u32>, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+        diesel::delete(pictures_tags::table)
+            .filter(pictures_tags::tag_id.eq_any(tag_ids))
+            .filter(pictures_tags::picture_id.eq_any(picture_ids))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 }

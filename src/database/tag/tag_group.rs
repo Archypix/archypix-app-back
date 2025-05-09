@@ -5,11 +5,12 @@ use crate::database::user::user::User;
 use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::dsl::{exists, not};
-use diesel::JoinOnDsl;
 use diesel::QueryDsl;
 use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
+use diesel::{BoolExpressionMethods, JoinOnDsl};
 use diesel::{ExpressionMethods, OptionalExtension};
 use rocket::serde::json::Json;
+use rocket::yansi::Paint;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -107,15 +108,23 @@ impl TagGroup {
     }
 
     /// Add a default tag to all pictures that don't have any tag from this tag group
-    pub fn add_default_tag_to_pictures_without_tag(
+    pub fn add_default_tag_to_pictures_without_tag_from_user(
         conn: &mut DBConn,
         default_tag_id: u32,
         tag_group_id: u32,
         user_id: u32,
     ) -> Result<(), ErrorResponder> {
-        // Get all pictures owned by the user that don't have any tag from this tag group
+        // Get all pictures accessible by the user that don't have any tag from this tag group
         let pictures_without_tag = pictures::table
-            .filter(pictures::owner_id.eq(user_id))
+            // Join with shared pictures
+            .left_join(
+                groups_pictures::table
+                    .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
+                    .on(groups_pictures::dsl::picture_id.eq(pictures::dsl::id)),
+            )
+            // Filter allowed pictures
+            .filter(shared_groups::dsl::user_id.eq(user_id).or(pictures::dsl::owner_id.eq(user_id)))
+            // Filter pictures that have no tag group
             .filter(not(exists(
                 pictures_tags::table
                     .inner_join(tags::table.on(tags::id.eq(pictures_tags::tag_id)))
@@ -123,6 +132,7 @@ impl TagGroup {
                     .filter(tags::tag_group_id.eq(tag_group_id)),
             )))
             .select(pictures::id)
+            .distinct()
             .load::<u64>(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
 
@@ -135,5 +145,38 @@ impl TagGroup {
         }
 
         Ok(())
+    }
+    /// Add a default tag to all pictures that don't have any tag from this tag group along a vec of pictures
+    pub fn add_default_tag_to_pictures_without_tag_from_list(
+        conn: &mut DBConn,
+        default_tag_id: u32,
+        tag_group_id: u32,
+        picture_ids: Vec<u64>,
+    ) -> Result<(), ErrorResponder> {
+        // Get all pictures in that vec that don't have any tag from this tag group
+        let pictures_without_tag = pictures::table
+            .filter(pictures::id.eq_any(picture_ids))
+            .filter(not(exists(
+                pictures_tags::table
+                    .inner_join(tags::table.on(tags::id.eq(pictures_tags::tag_id)))
+                    .filter(pictures_tags::picture_id.eq(pictures::id))
+                    .filter(tags::tag_group_id.eq(tag_group_id)),
+            )))
+            .select(pictures::id)
+            .load::<u64>(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+
+        Tag::add_pictures(conn, default_tag_id, pictures_without_tag)?;
+        Ok(())
+    }
+
+    /// Remove tags of this tag group from pictures
+    pub fn remove_pictures(&self, conn: &mut DBConn, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+        let tag_ids = Tag::list_tags(conn, self.id.unwrap())?.iter().map(|tag| tag.id).collect::<Vec<u32>>();
+        diesel::delete(pictures_tags::table)
+            .filter(pictures_tags::tag_id.eq_any(tag_ids))
+            .filter(pictures_tags::picture_id.eq_any(picture_ids))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 }
