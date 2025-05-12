@@ -25,7 +25,7 @@ pub struct PatchTagGroupRequest {
 /// Get all tags groups and all tags of the user
 #[openapi(tag = "Tags")]
 #[get("/tags")]
-pub async fn get_tags(db: &State<DBPool>, user: User) -> Result<Json<AllTagsResponse>, ErrorResponder> {
+pub async fn list_tags(db: &State<DBPool>, user: User) -> Result<Json<AllTagsResponse>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
     let tag_groups = TagGroup::list_all_tags_as_tag_group_with_tags(conn, user.id)?;
     Ok(Json(AllTagsResponse { tag_groups }))
@@ -34,7 +34,7 @@ pub async fn get_tags(db: &State<DBPool>, user: User) -> Result<Json<AllTagsResp
 /// Creates a new tag group with tags
 #[openapi(tag = "Tags")]
 #[post("/tag_group", data = "<data>")]
-pub async fn new_tag_group(data: Json<TagGroupWithTags>, db: &State<DBPool>, user: User) -> Result<Json<TagGroupWithTags>, ErrorResponder> {
+pub async fn create_tag_group(data: Json<TagGroupWithTags>, db: &State<DBPool>, user: User) -> Result<Json<TagGroupWithTags>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
 
     // Check requirements:

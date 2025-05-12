@@ -23,6 +23,7 @@ impl ArrangementStrategy {
         Arrangement::get_arrangements_from_groups_ids(conn, self.get_dependant_groups())
             .map(|arrangements| arrangements.iter().map(|a| a.id).collect())
     }
+    /// Get the groups ids on which the strategy depends.
     pub fn get_dependant_groups(&self) -> Vec<u32> {
         let mut dependant_groups = self.filter.get_dependant_groups();
         dependant_groups.extend(self.groupings.get_dependant_groups());

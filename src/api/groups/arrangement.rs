@@ -1,4 +1,3 @@
-use crate::api::groups::manual_groups::CreateManualGroupRequest;
 use crate::database::database::DBPool;
 use crate::database::group::arrangement::Arrangement;
 use crate::database::group::group::Group;
@@ -22,25 +21,23 @@ pub struct ArrangementResponse {
     groups: Vec<Group>,
 }
 
+/// List all user’s arrangements
+#[openapi(tag = "Arrangement")]
+#[get("/arrangement")]
+pub async fn list_arrangements(db: &State<DBPool>, user: User) -> Result<Json<Vec<Arrangement>>, ErrorResponder> {
+    let conn = &mut db.get().unwrap();
+    let arrangements = Arrangement::from_user_id(conn, user.id)?;
+    Ok(Json(arrangements))
+}
+
 /// Create a new arrangement
 #[openapi(tag = "Arrangement")]
-#[post("/arrangement", data = "<request>")]
-pub async fn create_arrangement(
-    db: &State<DBPool>,
-    user: User,
-    request: Json<ArrangementRequest>,
-) -> Result<Json<ArrangementResponse>, ErrorResponder> {
+#[post("/arrangement", data = "<data>")]
+pub async fn create_arrangement(db: &State<DBPool>, user: User, data: Json<ArrangementRequest>) -> Result<Json<ArrangementResponse>, ErrorResponder> {
     let mut conn = &mut db.get().unwrap();
 
     err_transaction(&mut conn, |conn| {
-        // TODO: Add the arrangement to the database
-        let arrangement = Arrangement::new(
-            conn,
-            user.id,
-            request.name.clone(),
-            request.strong_match_conversion,
-            request.strategy.clone(),
-        )?;
+        let arrangement = Arrangement::new(conn, user.id, data.name.clone(), data.strong_match_conversion, data.strategy.clone())?;
 
         // TODO: Check all pictures against this new arrangement and create groups
 
@@ -50,7 +47,7 @@ pub async fn create_arrangement(
 
 /// Edit an arrangement
 #[openapi(tag = "Arrangement")]
-#[put("/arrangement/<arrangement_id>", data = "<request>")]
+#[patch("/arrangement/<arrangement_id>", data = "<request>")]
 pub async fn edit_arrangement(
     db: &State<DBPool>,
     user: User,

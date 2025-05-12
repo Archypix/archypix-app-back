@@ -6,20 +6,53 @@ use crate::database::picture::picture_tag::PictureTag;
 use crate::database::schema::shared_groups;
 use crate::database::tag::tag::Tag;
 use crate::grouping::strategy_grouping::StrategyGrouping;
-use crate::utils::errors_catcher::ErrorResponder;
-use std::collections::{HashMap, HashSet};
+use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet, VecDeque};
+
+// Requirements:
+// - Create arrangement:
+//   Group only on this arrangement as no other arrangement can reference it.
+// - Edit arrangement:
+//   Group only on this arrangement and all arrangement that depends on it recursively.
+// - Delete arrangement:
+//   No grouping to do, just deleting all the groups after making sure that no other arrangement depends on it.
+// - Add new picture / edit picture attributes:
+//   Group the picture against all arrangements in topological order.
+// |                    | Pictures | Arrangements
+// |--------------------|----------|-------------------
+// | Create arrangement | All      | Created
+// | Edit   arrangement | All      | Edited + Dependants
+// | Add/Edit  pictures | Edited   | All
 
 pub fn group_new_pictures(
     conn: &mut DBConn,
     user_id: u32,
-    pictures: &Vec<u64>,
+    picture_ids_filter: Option<&Vec<u64>>,
+    arrangement_id_filter: Option<u32>,
     already_processed_users: &mut HashSet<u32>,
 ) -> Result<(), ErrorResponder> {
-    // Fetch all not manual arrangements and the list of their groups ids
-    let arrangements = Arrangement::list_arrangements_and_groups(conn, user_id)?;
+    // Fetch all not manual arrangements and the list of their group ids
+    let mut arrangements = Arrangement::list_arrangements_and_groups(conn, user_id)?;
 
-    // Sort topologically the arrangements in function of their dependencies over a group of another arrangement
-    let mut arrangements: Vec<ArrangementDetails> = topological_sort(arrangements);
+    // Filter arrangements if needed
+    if let Some(arrangement_id) = arrangement_id_filter {
+        let origin_arrangement = arrangements
+            .iter()
+            .find(|arrangement| arrangement.arrangement.id == arrangement_id)
+            .ok_or(
+                ErrorType::InvalidInput(format!("Arrangement of ID {} is not an arrangement of the user {}", arrangement_id, user_id).to_string())
+                    .res(),
+            )?
+            .clone();
+
+        arrangements.retain(|arrangement| arrangement.arrangement.groups_dependant || arrangement_id == arrangement.arrangement.id);
+        arrangements = topological_sort_from(arrangements, &origin_arrangement);
+    } else {
+        // Sort topologically the arrangements in function of their dependencies over a group of another arrangement
+        // If A depends on B, B will appear before A in the sorted list.
+        arrangements = topological_sort(arrangements);
+    }
 
     for mut arrangement in arrangements.iter_mut() {
         // Keep only pictures that match this arrangement
@@ -27,10 +60,10 @@ pub fn group_new_pictures(
             "Grouping pictures into arrangement: {:?} of user {:?}",
             arrangement.arrangement.id, user_id
         );
-        let pictures_ids = arrangement.strategy.filter.filter_pictures(conn, pictures)?;
+
+        let pictures_ids = arrangement.strategy.filter.filter_pictures(conn, picture_ids_filter)?;
 
         // Add pictures to groups
-
         let mut update_strategy = false;
         match &mut arrangement.strategy.groupings {
             StrategyGrouping::GroupByFilter(filter_grouping) => {
@@ -41,7 +74,7 @@ pub fn group_new_pictures(
                     } else {
                         &pictures_ids
                     };
-                    let group_pictures = filter.filter_pictures(conn, pictures_to_group)?;
+                    let group_pictures = filter.filter_pictures(conn, Some(pictures_to_group))?;
                     remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
                     Group::add_pictures(conn, *group_id, group_pictures)?;
                 }
@@ -85,6 +118,7 @@ pub fn group_new_pictures(
         }
     }
     already_processed_users.insert(user_id);
+
     // Process other users if arrangements groups are shared
     for arrangement in arrangements.iter() {
         for group_id in &arrangement.groups {
@@ -92,13 +126,52 @@ pub fn group_new_pictures(
             for shared_group in shared_groups {
                 if !already_processed_users.contains(&shared_group.user_id) {
                     already_processed_users.insert(shared_group.user_id);
-                    group_new_pictures(conn, shared_group.user_id, pictures, already_processed_users)?;
+                    // TODO: group only the pictures in that shared group instead of all pictures.
+                    //  Thie list of already processed users should be managed on a per picture/per group basis.
+                    group_new_pictures(conn, shared_group.user_id, picture_ids_filter, None, already_processed_users)?;
                 }
             }
         }
     }
 
     Ok(())
+}
+
+/// Sort the arrangements in topological order keeping only the subtree being the origin arrangement and its dependants.
+/// First explore all arrangements that depend on the origin arrangement
+/// Then apply a topological sort on these arrangements only.
+pub fn topological_sort_from(arrangements: Vec<ArrangementDetails>, origin_arrangement: &ArrangementDetails) -> Vec<ArrangementDetails> {
+    let mut visited: HashSet<u32> = HashSet::new();
+    let mut processing: VecDeque<u32> = VecDeque::new(); // arrangement_id, group_ids
+
+    visited.insert(origin_arrangement.arrangement.id);
+    processing.push_back(origin_arrangement.arrangement.id);
+
+    // Process the arrangements that depend on the processing arrangement
+    while let Some(processing_id) = processing.pop_front() {
+        let new_processing_ids = arrangements
+            .iter()
+            // Keep only arrangements that are not already visited
+            .filter(|a| !visited.contains(&a.arrangement.id))
+            // Keep only arrangements that depend on processing_a
+            .filter(|a| a.dependant_arrangements.contains(&processing_id))
+            .map(|a| a.arrangement.id)
+            .collect::<Vec<u32>>();
+
+        for new_processing_id in new_processing_ids {
+            visited.insert(new_processing_id);
+            processing.push_back(new_processing_id);
+        }
+    }
+
+    // Remove arrangements that have not been visited
+    let arrangements = arrangements
+        .into_iter()
+        .filter(|a| visited.contains(&a.arrangement.id))
+        .collect::<Vec<ArrangementDetails>>();
+
+    // Sort topologically the remaining arrangements.
+    topological_sort(arrangements)
 }
 
 pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<ArrangementDetails> {
@@ -111,18 +184,22 @@ pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<Arrang
         id_map.insert(arrangement.arrangement.id, arrangement);
     }
 
+    debug!(
+        "Sorting topologically arrangements: {:?}",
+        arrangements.iter().map(|a| a.arrangement.id).collect::<Vec<u32>>()
+    );
     // Recursive DFS helper for topological sort
     fn visit<'a>(
         node_id: u32,
         id_map: &'a HashMap<u32, &'a ArrangementDetails>,
         visited: &mut HashSet<u32>,
         temp_stack: &mut HashSet<u32>,
-        sorted: &mut Vec<&'a ArrangementDetails>,
+        sorted: &mut Vec<u32>,
     ) -> Result<(), String> {
         // Detect a cycle
         if temp_stack.contains(&node_id) {
             info!("Cycle detected in dependency graph");
-            return Err("Cycle detected in dependency graph".to_string());
+            return Ok(()); //Err("Cycle detected in dependency graph".to_string());
         }
         if visited.contains(&node_id) {
             return Ok(()); // Already processed
@@ -131,9 +208,11 @@ pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<Arrang
         // Temporarily mark this node
         temp_stack.insert(node_id);
 
+        debug!("    Looking for dependents of arrangement {}", node_id);
         // Process all dependencies of this node
         if let Some(node) = id_map.get(&node_id) {
             for &dep in &node.dependant_arrangements {
+                debug!("      Found dependency of {} : {}", node_id, dep);
                 visit(dep, id_map, visited, temp_stack, sorted)?;
             }
         }
@@ -141,23 +220,27 @@ pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<Arrang
         // Mark this node as fully processed and add to the result
         temp_stack.remove(&node_id);
         visited.insert(node_id);
-        if let Some(node) = id_map.get(&node_id) {
-            sorted.push(node);
-        }
+        sorted.push(node_id);
         Ok(())
     }
 
     // Execute the topological sort for all nodes
     for arrangement in id_map.values() {
+        debug!("  Starting DFS from arrangement ID: {}", arrangement.arrangement.id);
         let _res = visit(arrangement.arrangement.id, &id_map, &mut visited, &mut temp_stack, &mut sorted);
     }
+
+    let sorted_indices: HashMap<u32, usize> = sorted.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+
     // Sort the owned values
-    arrangements.clone().sort_by(|a, b| {
-        sorted
-            .iter()
-            .position(|o| o.arrangement.id == a.arrangement.id)
-            .unwrap_or(0)
-            .cmp(&sorted.iter().position(|o| o.arrangement.id == b.arrangement.id).unwrap_or(0))
+    arrangements.sort_by(|a, b| {
+        if let Some(i) = sorted_indices.get(&a.arrangement.id) {
+            if let Some(i2) = sorted_indices.get(&b.arrangement.id) {
+                return i.cmp(i2);
+            }
+            return Ordering::Less;
+        }
+        Ordering::Greater
     });
     arrangements
 }

@@ -5,6 +5,7 @@ use crate::database::utils::get_last_inserted_id;
 use crate::grouping::arrangement_strategy::ArrangementStrategy;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::{Associations, Identifiable, Queryable, Selectable};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -58,6 +59,12 @@ impl Arrangement {
         Ok(arrangement)
     }
 
+    pub fn from_user_id(conn: &mut DBConn, user_id: u32) -> Result<Vec<Arrangement>, ErrorResponder> {
+        arrangements::table
+            .filter(arrangements::user_id.eq(user_id))
+            .load(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
     pub fn from_id_and_user_id(conn: &mut DBConn, arrangement_id: u32, user_id: u32) -> Result<Arrangement, ErrorResponder> {
         Self::from_id_and_user_id_opt(conn, arrangement_id, user_id)?.ok_or_else(|| ErrorType::ArrangementNotFound.res())
     }
@@ -135,12 +142,12 @@ impl Arrangement {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?)
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ArrangementDetails {
     pub arrangement: Arrangement,
     pub strategy: ArrangementStrategy,
-    pub dependant_groups: Vec<u32>,
-    pub dependant_arrangements: Vec<u32>,
+    pub dependant_groups: Vec<u32>, // Ids of the groups on which this arrangement’s strategy depends (directly determinateed from the arrangement strategy)
+    pub dependant_arrangements: Vec<u32>, // Ids of the arrangements on which this arrangement depends (got with set_dependant_arrangements_auto fetching the groups’s arrangements)
     pub groups: Vec<u32>,
 }
 impl ArrangementDetails {
@@ -151,5 +158,14 @@ impl ArrangementDetails {
             .map(|arr| arr.arrangement.id)
             .clone()
             .collect();
+    }
+}
+
+impl PartialEq for ArrangementDetails {
+    fn eq(&self, other: &Self) -> bool {
+        self.arrangement.id == other.arrangement.id
+    }
+    fn ne(&self, other: &Self) -> bool {
+        self.arrangement.id != other.arrangement.id
     }
 }

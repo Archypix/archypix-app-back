@@ -25,9 +25,13 @@ pub struct StrategyFiltering {
 }
 
 impl StrategyFiltering {
-    pub fn filter_pictures(&self, conn: &mut DBConn, picture_ids: &Vec<u64>) -> Result<Vec<u64>, ErrorResponder> {
+    pub fn filter_pictures(&self, conn: &mut DBConn, picture_ids: Option<&Vec<u64>>) -> Result<Vec<u64>, ErrorResponder> {
         use crate::database::schema::*;
-        let mut req = pictures::table.filter(pictures::id.eq_any(picture_ids)).into_boxed();
+        let mut req = if let Some(picture_ids) = picture_ids {
+            pictures::table.filter(pictures::id.eq_any(picture_ids)).into_boxed()
+        } else {
+            pictures::table.into_boxed()
+        };
 
         type BoxedExpr = Box<dyn BoxableExpression<pictures::table, Mysql, SqlType = Bool>>;
 
