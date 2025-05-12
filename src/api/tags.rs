@@ -1,30 +1,21 @@
-use crate::api::groups::arrangement::CreateArrangementResponse;
-use crate::api::picture::ListPictureData;
-use crate::api::query_pictures::PicturesQuery;
 use crate::database::database::{DBConn, DBPool};
-use crate::database::picture::picture::Picture;
 use crate::database::picture::picture_tag::PictureTag;
 use crate::database::tag::tag::Tag;
 use crate::database::tag::tag_group::{TagGroup, TagGroupWithTags};
 use crate::database::user::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
-use diesel::dsl::{exists, not};
-use diesel::GroupedBy;
-use log::Level::Error;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::State;
-use rocket_cors::AllOrSome::All;
 use rocket_okapi::{openapi, JsonSchema};
-use std::collections::HashMap;
 
 #[derive(Debug, Serialize, JsonSchema)]
-struct AllTagsResponse {
+pub struct AllTagsResponse {
     pub tag_groups: Vec<TagGroupWithTags>,
 }
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
-struct PatchTagGroupRequest {
+pub struct PatchTagGroupRequest {
     pub edited_tag_group: TagGroup,
     pub new_tags: Vec<Tag>,
     pub edited_tags: Vec<Tag>,
@@ -43,7 +34,7 @@ pub async fn get_tags(db: &State<DBPool>, user: User) -> Result<Json<AllTagsResp
 /// Creates a new tag group with tags
 #[openapi(tag = "Tags")]
 #[post("/tag_group", data = "<data>")]
-pub async fn new_tag_group(mut data: Json<TagGroupWithTags>, db: &State<DBPool>, user: User) -> Result<Json<TagGroupWithTags>, ErrorResponder> {
+pub async fn new_tag_group(data: Json<TagGroupWithTags>, db: &State<DBPool>, user: User) -> Result<Json<TagGroupWithTags>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
 
     // Check requirements:

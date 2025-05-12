@@ -22,7 +22,7 @@ pub struct ModifyGroupPicturesRequest {
 
 /// Create a new manual group
 #[openapi(tag = "Groups")]
-#[post("/groups/manual", data = "<request>")]
+#[post("/group/manual", data = "<request>")]
 pub async fn create_manual_group(db: &State<DBPool>, user: User, request: Json<CreateManualGroupRequest>) -> Result<Json<Group>, ErrorResponder> {
     let mut conn = &mut db.get().unwrap();
 
@@ -40,7 +40,7 @@ pub async fn create_manual_group(db: &State<DBPool>, user: User, request: Json<C
 
 /// Add pictures to a manual group
 #[openapi(tag = "Groups")]
-#[post("/groups/pictures", data = "<request>")]
+#[post("/group/manual/pictures", data = "<request>")]
 pub async fn add_pictures_to_group(db: &State<DBPool>, user: User, request: Json<ModifyGroupPicturesRequest>) -> Result<(), ErrorResponder> {
     let mut conn = &mut db.get().unwrap();
 
@@ -58,7 +58,7 @@ pub async fn add_pictures_to_group(db: &State<DBPool>, user: User, request: Json
 
 /// Remove pictures from a manual group
 #[openapi(tag = "Groups")]
-#[delete("/groups/pictures", data = "<request>")]
+#[delete("/group/manual/pictures", data = "<request>")]
 pub async fn remove_pictures_from_group(db: &State<DBPool>, user: User, request: Json<ModifyGroupPicturesRequest>) -> Result<(), ErrorResponder> {
     let mut conn = &mut db.get().unwrap();
 

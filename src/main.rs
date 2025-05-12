@@ -8,6 +8,10 @@ use crate::api::auth::confirm::{
 use crate::api::auth::signin::{auth_signin, auth_signin_email, okapi_add_operation_for_auth_signin_, okapi_add_operation_for_auth_signin_email_};
 use crate::api::auth::signup::{auth_signup, okapi_add_operation_for_auth_signup_};
 use crate::api::auth::status::{auth_status, okapi_add_operation_for_auth_status_};
+use crate::api::groups::arrangement::{
+    create_arrangement, delete_arrangement, edit_arrangement, okapi_add_operation_for_create_arrangement_,
+    okapi_add_operation_for_delete_arrangement_, okapi_add_operation_for_edit_arrangement_,
+};
 use crate::api::groups::manual_groups::{
     add_pictures_to_group, create_manual_group, okapi_add_operation_for_add_pictures_to_group_, okapi_add_operation_for_create_manual_group_,
     okapi_add_operation_for_remove_pictures_from_group_, remove_pictures_from_group,
@@ -133,6 +137,10 @@ async fn rocket() -> _ {
                 add_tag_to_pictures,
                 remove_tag_from_pictures,
                 edit_picture_tags,
+                // Arrangements
+                create_arrangement,
+                edit_arrangement,
+                delete_arrangement,
                 // Groups
                 create_manual_group,
                 add_pictures_to_group,

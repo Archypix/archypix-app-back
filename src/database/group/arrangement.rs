@@ -6,8 +6,10 @@ use crate::grouping::arrangement_strategy::ArrangementStrategy;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
 use diesel::{Associations, Identifiable, Queryable, Selectable};
+use schemars::JsonSchema;
+use serde::Serialize;
 
-#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq, Clone)]
+#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq, Clone, JsonSchema, Serialize)]
 #[diesel(primary_key(id))]
 #[diesel(belongs_to(User))]
 #[diesel(table_name = arrangements)]
