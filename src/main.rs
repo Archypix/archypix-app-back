@@ -9,8 +9,8 @@ use crate::api::auth::signin::{auth_signin, auth_signin_email, okapi_add_operati
 use crate::api::auth::signup::{auth_signup, okapi_add_operation_for_auth_signup_};
 use crate::api::auth::status::{auth_status, okapi_add_operation_for_auth_status_};
 use crate::api::groups::arrangement::{
-    create_arrangement, delete_arrangement, edit_arrangement, okapi_add_operation_for_create_arrangement_,
-    okapi_add_operation_for_delete_arrangement_, okapi_add_operation_for_edit_arrangement_,
+    create_arrangement, delete_arrangement, edit_arrangement, list_arrangements, okapi_add_operation_for_create_arrangement_,
+    okapi_add_operation_for_delete_arrangement_, okapi_add_operation_for_edit_arrangement_, okapi_add_operation_for_list_arrangements_,
 };
 use crate::api::groups::manual_groups::{
     add_pictures_to_group, create_manual_group, okapi_add_operation_for_add_pictures_to_group_, okapi_add_operation_for_create_manual_group_,
@@ -23,10 +23,10 @@ use crate::api::picture::{
 };
 use crate::api::query_pictures::{okapi_add_operation_for_query_pictures_, query_pictures};
 use crate::api::tags::{
-    add_tag_to_pictures, delete_tag_group, edit_picture_tags, get_tags, new_tag_group, okapi_add_operation_for_add_tag_to_pictures_,
-    okapi_add_operation_for_delete_tag_group_, okapi_add_operation_for_edit_picture_tags_, okapi_add_operation_for_get_tags_,
-    okapi_add_operation_for_new_tag_group_, okapi_add_operation_for_patch_tag_group_, okapi_add_operation_for_remove_tag_from_pictures_,
-    patch_tag_group, remove_tag_from_pictures,
+    add_tag_to_pictures, create_tag_group, delete_tag_group, edit_picture_tags, list_tags, okapi_add_operation_for_add_tag_to_pictures_,
+    okapi_add_operation_for_create_tag_group_, okapi_add_operation_for_delete_tag_group_, okapi_add_operation_for_edit_picture_tags_,
+    okapi_add_operation_for_list_tags_, okapi_add_operation_for_patch_tag_group_, okapi_add_operation_for_remove_tag_from_pictures_, patch_tag_group,
+    remove_tag_from_pictures,
 };
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
@@ -77,6 +77,10 @@ pub mod database {
 }
 pub mod grouping {
     automod::dir!(pub "src/grouping");
+    pub mod tests {
+        #[cfg(test)]
+        pub mod arrangement_sort_algorithms;
+    }
 }
 pub mod mailing {
     automod::dir!(pub "src/mailing");
@@ -130,14 +134,15 @@ async fn rocket() -> _ {
                 get_pictures_details,
                 get_picture_details,
                 // Tags
-                get_tags,
-                new_tag_group,
+                list_tags,
+                create_tag_group,
                 patch_tag_group,
                 delete_tag_group,
                 add_tag_to_pictures,
                 remove_tag_from_pictures,
                 edit_picture_tags,
                 // Arrangements
+                list_arrangements,
                 create_arrangement,
                 edit_arrangement,
                 delete_arrangement,
