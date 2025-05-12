@@ -59,10 +59,10 @@ impl Group {
         self.arrangement_id
     }
 
-    pub fn add_pictures(conn: &mut DBConn, group_id: u32, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+    pub fn add_pictures(conn: &mut DBConn, group_id: u32, picture_ids: &Vec<u64>) -> Result<usize, ErrorResponder> {
         let values: Vec<_> = picture_ids
             .into_iter()
-            .map(|pic_id| (groups_pictures::group_id.eq(group_id), groups_pictures::picture_id.eq(pic_id)))
+            .map(|pic_id| (groups_pictures::group_id.eq(group_id), groups_pictures::picture_id.eq(*pic_id)))
             .collect();
 
         diesel::insert_into(groups_pictures::table)
@@ -71,7 +71,7 @@ impl Group {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
-    pub fn remove_pictures(&self, conn: &mut DBConn, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+    pub fn remove_pictures(&self, conn: &mut DBConn, picture_ids: &Vec<u64>) -> Result<usize, ErrorResponder> {
         diesel::delete(groups_pictures::table)
             .filter(groups_pictures::group_id.eq(self.id))
             .filter(groups_pictures::picture_id.eq_any(picture_ids))

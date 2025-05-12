@@ -7,9 +7,9 @@ use crate::database::schema::shared_groups;
 use crate::database::tag::tag::Tag;
 use crate::grouping::strategy_grouping::StrategyGrouping;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use rocket::yansi::Paint;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
-
 // Requirements:
 // - Create arrangement:
 //   Group only on this arrangement as no other arrangement can reference it.
@@ -49,8 +49,6 @@ pub fn group_new_pictures(
         arrangements.retain(|arrangement| arrangement.arrangement.groups_dependant || arrangement_id == arrangement.arrangement.id);
         arrangements = topological_sort_from(arrangements, &origin_arrangement);
     } else {
-        // Sort topologically the arrangements in function of their dependencies over a group of another arrangement
-        // If A depends on B, B will appear before A in the sorted list.
         arrangements = topological_sort(arrangements);
     }
 
@@ -76,12 +74,12 @@ pub fn group_new_pictures(
                     };
                     let group_pictures = filter.filter_pictures(conn, Some(pictures_to_group))?;
                     remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                    Group::add_pictures(conn, *group_id, group_pictures)?;
+                    add_pictures_to_group_and_group_via_shared_group(conn, &group_pictures, *group_id, already_processed_users)?;
                 }
                 if remaining_pictures_ids.len() != 0 {
                     let (other_group_id, update) = filter_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
                     update_strategy = update;
-                    Group::add_pictures(conn, other_group_id, remaining_pictures_ids)?;
+                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id, already_processed_users)?;
                 }
             }
             StrategyGrouping::GroupByTags(tag_grouping) => {
@@ -98,13 +96,13 @@ pub fn group_new_pictures(
                         let (group_id, update) = tag_grouping.get_or_create_tag_group_id(conn, &tag, arrangement.arrangement.id)?;
                         update_strategy |= update;
                         remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                        Group::add_pictures(conn, group_id, group_pictures)?;
+                        add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, group_id, already_processed_users)?;
                     }
                 }
                 if remaining_pictures_ids.len() != 0 {
                     let (other_group_id, update) = tag_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
                     update_strategy |= update;
-                    Group::add_pictures(conn, other_group_id, remaining_pictures_ids)?;
+                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id, already_processed_users)?;
                 }
             }
             StrategyGrouping::GroupByExifValues(e) => {}
@@ -119,19 +117,35 @@ pub fn group_new_pictures(
     }
     already_processed_users.insert(user_id);
 
-    // Process other users if arrangements groups are shared
-    for arrangement in arrangements.iter() {
-        for group_id in &arrangement.groups {
-            let shared_groups = SharedGroup::from_group_id(conn, *group_id)?;
-            for shared_group in shared_groups {
-                if !already_processed_users.contains(&shared_group.user_id) {
-                    already_processed_users.insert(shared_group.user_id);
-                    // TODO: group only the pictures in that shared group instead of all pictures.
-                    //  Thie list of already processed users should be managed on a per picture/per group basis.
-                    group_new_pictures(conn, shared_group.user_id, picture_ids_filter, None, already_processed_users)?;
-                }
-            }
-        }
+    Ok(())
+}
+
+/// Add pictures to a group and then check for each user to which the group is shared:
+/// - Group the pictures on which the user gained access in his context.
+/// - If share match conversion is enabled, apply it to all pictures.
+pub fn add_pictures_to_group_and_group_via_shared_group(
+    conn: &mut DBConn,
+    picture_ids: &Vec<u64>,
+    group_id: u32,
+    already_processed_users: &mut HashSet<u32>,
+) -> Result<(), ErrorResponder> {
+    let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
+    for shared_group in shared_groups.iter() {
+
+        // TODO: Even if the user to which the group is shared already has access to the picture, we need to apply share match conversion.
+        //  If the user has just gained access to the picture, in addition to share match conversion should be applied the grouping strategies.
+
+        // TODO: check if the user has access to the pictures.
+    }
+
+    Group::add_pictures(conn, group_id, picture_ids)?;
+
+    for shared_group in shared_groups {
+
+        // TODO: Group new pictures on which the user gained access to.
+        // group_new_pictures(conn, shared_group.user_id, Some(picture_ids), None, already_processed_users)?;
+
+        // TODO: apply share match conversion if enabled.
     }
 
     Ok(())
@@ -174,6 +188,8 @@ pub fn topological_sort_from(arrangements: Vec<ArrangementDetails>, origin_arran
     topological_sort(arrangements)
 }
 
+/// Topologically sort the arrangements in function of their dependencies over a group of another arrangement.
+/// If A depends on B, B will appear before A in the sorted list.
 pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<ArrangementDetails> {
     let mut sorted = Vec::new();
     let mut visited = HashSet::new();
