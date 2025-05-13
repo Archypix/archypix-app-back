@@ -23,7 +23,7 @@ pub struct SigninData {
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct SigninResponse {
     pub status: UserStatus,
-    pub user_id: u32,
+    pub user_id: i32,
     pub name: String,
     pub email: String,
     pub auth_token: String,
@@ -31,7 +31,7 @@ pub struct SigninResponse {
 
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct SigninEmailResponse {
-    pub user_id: u32,
+    pub user_id: i32,
     pub code_token: String,
 }
 
@@ -94,7 +94,7 @@ pub fn auth_signin_email(
         context.insert("name", &user.name);
         context.insert("url", &signin_url);
         context.insert("code", &code_str);
-        context.insert("ip", &device_info.ip_address.unwrap_or("Unknown".to_string()));
+        context.insert("ip", &device_info.ip_address.map(|ip| ip.to_string()).unwrap_or("Unknown".to_string()));
         context.insert("agent", &device_info.device_string);
         send_rendered_email((user.name.clone(), data.email.clone()), subject, "confirm_signin".to_string(), context);
 

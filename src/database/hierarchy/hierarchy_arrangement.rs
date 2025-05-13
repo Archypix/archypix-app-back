@@ -11,9 +11,9 @@ use crate::database::schema::*;
 #[diesel(belongs_to(Group, foreign_key = parent_group_id))]
 #[diesel(table_name = hierarchies_arrangements)]
 pub struct HierarchyArrangements {
-    pub hierarchy_id: u32,
-    pub arrangement_id: u32,
-    pub parent_group_id: u32,
+    pub hierarchy_id: i32,
+    pub arrangement_id: i32,
+    pub parent_group_id: Option<i32>,
 }
 
 impl HierarchyArrangements {}

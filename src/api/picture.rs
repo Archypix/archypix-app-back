@@ -80,14 +80,14 @@ pub async fn add_picture(
             .metadata()
             .map_err(|e| ErrorType::InternalError(format!("Unable to get file metadata: {}", e.to_string())).res())?
             .size();
-        let mut file_size_ko = ((file_size_o + 1023) / 1024) as u32;
+        let mut file_size_ko = ((file_size_o + 1023) / 1024) as i32;
         if file_size_ko > 10_000_000 {
             return ErrorType::InvalidInput(format!("File size is too big: {} Ko", file_size_ko)).res_err();
         }
         if file_size_ko == 0 {
             file_size_ko = 1;
         }
-        if file_size_ko > (user.storage_limit_mo as u64 * 1024u64 - user.storage_count_ko) as u32 {
+        if user.storage_count_ko + (file_size_ko as i64) > user.storage_limit_ko {
             return ErrorType::InvalidInput(format!("File size is too big: {} Ko", file_size_ko)).res_err();
         }
 
@@ -148,7 +148,7 @@ pub async fn add_picture(
 }
 
 pub struct PictureStream {
-    picture_id: u64,
+    picture_id: i64,
     picture_stream: ByteStream,
 }
 impl<'a> Responder<'a, 'a> for PictureStream {
@@ -175,7 +175,7 @@ impl OpenApiResponderInner for PictureStream {
 pub async fn get_picture(
     db: &State<DBPool>,
     format: PictureThumbnail,
-    picture_id: u64,
+    picture_id: i64,
     user: Option<User>,
     picture_storer: &State<PictureStorer>,
 ) -> Result<PictureStream, ErrorResponder> {
@@ -196,10 +196,10 @@ pub async fn get_picture(
 
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct ListPictureData {
-    pub(crate) id: u64,
+    pub(crate) id: i64,
     pub(crate) name: String,
-    pub(crate) width: u16,
-    pub(crate) height: u16,
+    pub(crate) width: i16,
+    pub(crate) height: i16,
     pub(crate) creation_date: NaiveDateTime,
     pub(crate) edition_date: NaiveDateTime,
 }
@@ -223,7 +223,7 @@ pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Res
 /// Get pictures details
 #[openapi(tag = "Picture")]
 #[post("/pictures_details", data = "<picture_ids>")]
-pub async fn get_pictures_details(db: &State<DBPool>, user: User, picture_ids: Json<Vec<u64>>) -> Result<Json<Vec<Picture>>, ErrorResponder> {
+pub async fn get_pictures_details(db: &State<DBPool>, user: User, picture_ids: Json<Vec<i64>>) -> Result<Json<Vec<Picture>>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
 
     let pictures = Picture::get_pictures_details(conn, user.id, picture_ids.into_inner())?;
@@ -233,7 +233,7 @@ pub async fn get_pictures_details(db: &State<DBPool>, user: User, picture_ids: J
 /// Get picture details, includes tags and ratings
 #[openapi(tag = "Picture")]
 #[get("/picture_details/<picture_id>")]
-pub async fn get_picture_details(db: &State<DBPool>, user: User, picture_id: u64) -> Result<Json<PictureDetails>, ErrorResponder> {
+pub async fn get_picture_details(db: &State<DBPool>, user: User, picture_id: i64) -> Result<Json<PictureDetails>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
 
     let picture = Picture::get_picture_details(conn, user.id, picture_id)?;

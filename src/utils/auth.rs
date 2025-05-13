@@ -1,12 +1,11 @@
-use std::ops::AddAssign;
-
-use rocket::form::validate::Contains;
+use ipnet::IpNet;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::Request;
 use rocket_okapi::gen::OpenApiGenerator;
 use rocket_okapi::okapi::openapi3::{Parameter, ParameterValue, SecurityRequirement, SecurityScheme, SecuritySchemeData};
 use rocket_okapi::request::{OpenApiFromRequest, RequestHeaderInput};
+use std::ops::AddAssign;
 use user_agent_parser::{Device, Engine, OS};
 
 use crate::database::database::DBPool;
@@ -78,7 +77,7 @@ impl OpenApiFromRequest<'_> for User {
 }
 /// Request Guard with the only purpose of extracting the user id and auth token from the headers.
 pub struct UserAuthInfo {
-    pub user_id: Option<u32>,
+    pub user_id: Option<i32>,
     pub auth_token: Option<Vec<u8>>,
 }
 #[rocket::async_trait]
@@ -116,35 +115,24 @@ impl OpenApiFromRequest<'_> for UserAuthInfo {
 #[derive(Debug)]
 pub struct DeviceInfo {
     pub(crate) device_string: String,
-    pub(crate) ip_address: Option<String>,
+    pub(crate) ip_address: Option<IpNet>,
 }
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for DeviceInfo {
     type Error = ();
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let mut ip_address = request
+        let ip_address = request
             .remote()
-            .map(|s| s.to_string())
-            .or(request.headers().get_one("X-Forwarded-For").map(|s| s.to_string()));
+            .map(|s| s.ip().to_string())
+            .or(request.headers().get_one("X-Forwarded-For").map(|s| s.to_string()))
+            .map(|s| s.to_string().parse::<IpNet>().ok())
+            .flatten();
 
         let device = Device::from_request(request).await.unwrap();
         let os = OS::from_request(request).await.unwrap();
         let engine = Engine::from_request(request).await.unwrap();
 
         let device_string = device_str(device, os, engine);
-
-        // removing port from ip address even if it is an ipv6
-        if let Some(ip) = ip_address.clone() {
-            if ip.contains(':') {
-                if ip.chars().filter(|c| *c == 'z').count() > 1 {
-                    if ip.starts_with('[') && ip.contains("]") {
-                        ip_address = Some(ip[1..ip.find("]").unwrap()].to_string());
-                    }
-                } else {
-                    ip_address = Some(ip[0..ip.find(":").unwrap()].to_string());
-                }
-            }
-        }
 
         Outcome::Success(DeviceInfo { device_string, ip_address })
     }

@@ -2,6 +2,7 @@ use crate::database::database::DBConn;
 use crate::database::group::arrangement::{Arrangement, ArrangementDetails};
 use crate::database::group::group::Group;
 use crate::database::group::shared_group::SharedGroup;
+use crate::database::picture::picture::Picture;
 use crate::database::picture::picture_tag::PictureTag;
 use crate::database::schema::shared_groups;
 use crate::database::tag::tag::Tag;
@@ -27,10 +28,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 pub fn group_new_pictures(
     conn: &mut DBConn,
-    user_id: u32,
-    picture_ids_filter: Option<&Vec<u64>>,
-    arrangement_id_filter: Option<u32>,
-    already_processed_users: &mut HashSet<u32>,
+    user_id: i32,
+    picture_ids_filter: Option<&Vec<i64>>,
+    arrangement_id_filter: Option<i32>,
+    already_processed_users: &mut HashSet<i32>,
 ) -> Result<(), ErrorResponder> {
     // Fetch all not manual arrangements and the list of their group ids
     let mut arrangements = Arrangement::list_arrangements_and_groups(conn, user_id)?;
@@ -125,17 +126,23 @@ pub fn group_new_pictures(
 /// - If share match conversion is enabled, apply it to all pictures.
 pub fn add_pictures_to_group_and_group_via_shared_group(
     conn: &mut DBConn,
-    picture_ids: &Vec<u64>,
-    group_id: u32,
-    already_processed_users: &mut HashSet<u32>,
+    picture_ids: &Vec<i64>,
+    group_id: i32,
+    already_processed_users: &mut HashSet<i32>,
 ) -> Result<(), ErrorResponder> {
     let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
-    for shared_group in shared_groups.iter() {
 
+    let mut users_accessible_pictures = HashMap::new();
+
+    for shared_group in shared_groups.iter() {
         // TODO: Even if the user to which the group is shared already has access to the picture, we need to apply share match conversion.
         //  If the user has just gained access to the picture, in addition to share match conversion should be applied the grouping strategies.
 
         // TODO: check if the user has access to the pictures.
+        let accessible_pictures = Picture::filter_user_accessible_pictures(conn, shared_group.user_id, picture_ids)?;
+        if accessible_pictures.len() != 0 {
+            users_accessible_pictures.insert(shared_group.user_id, accessible_pictures);
+        }
     }
 
     Group::add_pictures(conn, group_id, picture_ids)?;
@@ -155,8 +162,8 @@ pub fn add_pictures_to_group_and_group_via_shared_group(
 /// First explore all arrangements that depend on the origin arrangement
 /// Then apply a topological sort on these arrangements only.
 pub fn topological_sort_from(arrangements: Vec<ArrangementDetails>, origin_arrangement: &ArrangementDetails) -> Vec<ArrangementDetails> {
-    let mut visited: HashSet<u32> = HashSet::new();
-    let mut processing: VecDeque<u32> = VecDeque::new(); // arrangement_id, group_ids
+    let mut visited: HashSet<i32> = HashSet::new();
+    let mut processing: VecDeque<i32> = VecDeque::new(); // arrangement_id, group_ids
 
     visited.insert(origin_arrangement.arrangement.id);
     processing.push_back(origin_arrangement.arrangement.id);
@@ -170,7 +177,7 @@ pub fn topological_sort_from(arrangements: Vec<ArrangementDetails>, origin_arran
             // Keep only arrangements that depend on processing_a
             .filter(|a| a.dependant_arrangements.contains(&processing_id))
             .map(|a| a.arrangement.id)
-            .collect::<Vec<u32>>();
+            .collect::<Vec<i32>>();
 
         for new_processing_id in new_processing_ids {
             visited.insert(new_processing_id);
@@ -195,22 +202,22 @@ pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<Arrang
     let mut visited = HashSet::new();
     let mut temp_stack = HashSet::new();
 
-    let mut id_map: HashMap<u32, &ArrangementDetails> = HashMap::new();
+    let mut id_map: HashMap<i32, &ArrangementDetails> = HashMap::new();
     for arrangement in &arrangements {
         id_map.insert(arrangement.arrangement.id, arrangement);
     }
 
     debug!(
         "Sorting topologically arrangements: {:?}",
-        arrangements.iter().map(|a| a.arrangement.id).collect::<Vec<u32>>()
+        arrangements.iter().map(|a| a.arrangement.id).collect::<Vec<i32>>()
     );
     // Recursive DFS helper for topological sort
     fn visit<'a>(
-        node_id: u32,
-        id_map: &'a HashMap<u32, &'a ArrangementDetails>,
-        visited: &mut HashSet<u32>,
-        temp_stack: &mut HashSet<u32>,
-        sorted: &mut Vec<u32>,
+        node_id: i32,
+        id_map: &'a HashMap<i32, &'a ArrangementDetails>,
+        visited: &mut HashSet<i32>,
+        temp_stack: &mut HashSet<i32>,
+        sorted: &mut Vec<i32>,
     ) -> Result<(), String> {
         // Detect a cycle
         if temp_stack.contains(&node_id) {
@@ -246,7 +253,7 @@ pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<Arrang
         let _res = visit(arrangement.arrangement.id, &id_map, &mut visited, &mut temp_stack, &mut sorted);
     }
 
-    let sorted_indices: HashMap<u32, usize> = sorted.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+    let sorted_indices: HashMap<i32, usize> = sorted.iter().enumerate().map(|(i, &id)| (id, i)).collect();
 
     // Sort the owned values
     arrangements.sort_by(|a, b| {

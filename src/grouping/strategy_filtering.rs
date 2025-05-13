@@ -6,10 +6,8 @@ use crate::database::schema::*;
 use crate::database::schema::{groups_pictures, pictures_tags, PictureOrientation};
 use crate::grouping::arrangement_strategy::ExifDataTypeValue;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
-use bigdecimal::BigDecimal;
-use chrono::NaiveDateTime;
 use diesel::dsl::{exists, not};
-use diesel::mysql::Mysql;
+use diesel::pg::Pg;
 use diesel::prelude::*;
 use diesel::sql_types::Bool;
 use diesel::QueryDsl;
@@ -25,7 +23,7 @@ pub struct StrategyFiltering {
 }
 
 impl StrategyFiltering {
-    pub fn filter_pictures(&self, conn: &mut DBConn, picture_ids: Option<&Vec<u64>>) -> Result<Vec<u64>, ErrorResponder> {
+    pub fn filter_pictures(&self, conn: &mut DBConn, picture_ids: Option<&Vec<i64>>) -> Result<Vec<i64>, ErrorResponder> {
         use crate::database::schema::*;
         let mut req = if let Some(picture_ids) = picture_ids {
             pictures::table.filter(pictures::id.eq_any(picture_ids)).into_boxed()
@@ -33,7 +31,7 @@ impl StrategyFiltering {
             pictures::table.into_boxed()
         };
 
-        type BoxedExpr = Box<dyn BoxableExpression<pictures::table, Mysql, SqlType = Bool>>;
+        type BoxedExpr = Box<dyn BoxableExpression<pictures::table, Pg, SqlType = Bool>>;
 
         // Apply with OR and then AND (in DNF)
         let mut or_conditions: Option<BoxedExpr> = None;
@@ -61,7 +59,7 @@ impl StrategyFiltering {
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn get_dependant_groups(&self) -> Vec<u32> {
+    pub fn get_dependant_groups(&self) -> Vec<i32> {
         let mut dependant_arrangements = Vec::new();
         for filters in self.filters.iter() {
             for filter in filters.iter() {
@@ -101,16 +99,16 @@ impl StrategyFiltering {
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub enum FilterType {
-    IncludeTags(Vec<u32>),
-    ExcludeTags(Vec<u32>),
-    IncludeGroups(Vec<u32>),
-    ExcludeGroups(Vec<u32>),
+    IncludeTags(Vec<i32>),
+    ExcludeTags(Vec<i32>),
+    IncludeGroups(Vec<i32>),
+    ExcludeGroups(Vec<i32>),
     ExifEqualTo(ExifDataTypeValue),       // Equal to any of the values
     ExifNotEqualTo(ExifDataTypeValue),    // Different from any of the values
     ExifInInterval(ExifDataTypeValue),    // Interval composed of two first values
     ExifNotInInterval(ExifDataTypeValue), // Interval composed of two first values
 }
-type PicturesBoxedExpr = Box<dyn BoxableExpression<crate::database::schema::pictures::table, Mysql, SqlType = Bool>>;
+type PicturesBoxedExpr = Box<dyn BoxableExpression<crate::database::schema::pictures::table, Pg, SqlType = Bool>>;
 impl FilterType {
     pub fn get_filter_dsl_predicate(self) -> PicturesBoxedExpr {
         use crate::database::schema::*;

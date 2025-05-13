@@ -19,17 +19,17 @@ use std::cmp::Ordering;
 pub struct PicturesQuery {
     pub filters: Vec<PictureFilter>, // Applies an AND between filters
     pub sorts: Vec<PictureSort>,
-    pub page: u32,
+    pub page: i32,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 pub enum PictureFilter {
-    Arrangement { invert: bool, ids: Vec<u32> }, // user must be the owner
-    Group { invert: bool, ids: Vec<u32> },       // can be a shared group
+    Arrangement { invert: bool, ids: Vec<i32> }, // user must be the owner
+    Group { invert: bool, ids: Vec<i32> },       // can be a shared group
     Deleted { invert: bool },
     Owned { invert: bool },                   // Only pictures owned by the user
-    TagGroup { invert: bool, ids: Vec<u32> }, // user must be the owner
-    Tag { invert: bool, ids: Vec<u32> },      // user must be the owner
+    TagGroup { invert: bool, ids: Vec<i32> }, // user must be the owner
+    Tag { invert: bool, ids: Vec<i32> },      // user must be the owner
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]

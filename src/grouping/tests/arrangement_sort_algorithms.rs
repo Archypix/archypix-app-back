@@ -13,7 +13,7 @@ pub fn test() {
     assert_eq!(dequeue.pop_front(), Some(1));
 }
 
-pub fn create_arrangement_with_dependant_arrangements(id: u32, dependant_arrangements: Vec<u32>) -> ArrangementDetails {
+pub fn create_arrangement_with_dependant_arrangements(id: i32, dependant_arrangements: Vec<i32>) -> ArrangementDetails {
     ArrangementDetails {
         arrangement: Arrangement {
             id,
@@ -42,7 +42,7 @@ pub fn create_arrangement_with_dependant_arrangements(id: u32, dependant_arrange
         groups: vec![],
     }
 }
-pub fn create_arrangement_with_dependant_groups(id: u32, groups: Vec<u32>, dependant_groups: Vec<u32>) -> ArrangementDetails {
+pub fn create_arrangement_with_dependant_groups(id: i32, groups: Vec<i32>, dependant_groups: Vec<i32>) -> ArrangementDetails {
     ArrangementDetails {
         arrangement: Arrangement {
             id,
@@ -84,7 +84,7 @@ pub fn test_set_dependants_arrangements_auto() {
     arrangement_3.set_dependant_arrangements_auto(&arrangement_details);
 
     assert_eq!(arrangement_1.dependant_arrangements, vec![2, 3]);
-    assert_eq!(arrangement_2.dependant_arrangements, Vec::<u32>::new());
+    assert_eq!(arrangement_2.dependant_arrangements, Vec::<i32>::new());
     assert_eq!(arrangement_3.dependant_arrangements, vec![2]);
 }
 
@@ -98,7 +98,7 @@ pub fn test_topological_sort_1() {
         create_arrangement_with_dependant_arrangements(5, vec![]),
     ];
 
-    let mut sorted: Vec<u32> = topological_sort(arrangements).iter().map(|a| a.arrangement.id).collect();
+    let mut sorted: Vec<i32> = topological_sort(arrangements).iter().map(|a| a.arrangement.id).collect();
     sorted.retain(|id| id != &5);
     assert_eq!(sorted, vec![4, 3, 1, 2]);
 }
@@ -112,7 +112,7 @@ pub fn test_topological_sort_2() {
         create_arrangement_with_dependant_arrangements(5, vec![2]),
     ];
 
-    let sorted: Vec<u32> = topological_sort(arrangements).iter().map(|a| a.arrangement.id).collect();
+    let sorted: Vec<i32> = topological_sort(arrangements).iter().map(|a| a.arrangement.id).collect();
 
     assert_eq!(sorted, vec![2, 5, 1, 4, 3]);
 }
@@ -127,7 +127,7 @@ pub fn test_topological_sort_from_1() {
     ];
     let origin = arrangements.iter().find(|a| a.arrangement.id == 1).unwrap().clone();
 
-    let sorted: Vec<u32> = topological_sort_from(arrangements, &origin).iter().map(|a| a.arrangement.id).collect();
+    let sorted: Vec<i32> = topological_sort_from(arrangements, &origin).iter().map(|a| a.arrangement.id).collect();
 
     assert_eq!(sorted, vec![1, 4, 3]);
 }
@@ -143,7 +143,7 @@ pub fn test_topological_sort_from_2() {
     ];
     let origin = arrangements.iter().find(|a| a.arrangement.id == 4).unwrap().clone();
 
-    let sorted: Vec<u32> = topological_sort_from(arrangements, &origin).iter().map(|a| a.arrangement.id).collect();
+    let sorted: Vec<i32> = topological_sort_from(arrangements, &origin).iter().map(|a| a.arrangement.id).collect();
 
     assert_eq!(sorted, vec![4, 3, 6]);
 }
@@ -159,7 +159,7 @@ pub fn test_topological_sort_from_3() {
     ];
     let origin = arrangements.iter().find(|a| a.arrangement.id == 2).unwrap().clone();
 
-    let sorted: Vec<u32> = topological_sort_from(arrangements, &origin).iter().map(|a| a.arrangement.id).collect();
+    let sorted: Vec<i32> = topological_sort_from(arrangements, &origin).iter().map(|a| a.arrangement.id).collect();
 
     assert_eq!(sorted, vec![2, 5, 1, 4, 3, 6]);
 }

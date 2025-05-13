@@ -19,7 +19,7 @@ pub struct ConfirmCodeData {
     code_token: String,
     /// 4-digit code emailed to the user
     #[validate(range(min = 0, max = 9999, message = "Code must be a 4 digit number"))]
-    code: u16,
+    code: i16,
 }
 
 #[derive(JsonSchema, Deserialize, Debug, Validate)]
@@ -32,7 +32,7 @@ pub struct ConfirmTokenData {
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct ConfirmSignInUpResponse {
     pub status: UserStatus,
-    pub user_id: u32,
+    pub user_id: i32,
     pub auth_token: String,
     pub name: String,
     pub email: String,

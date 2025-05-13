@@ -8,48 +8,49 @@ use chrono::{Duration, NaiveDateTime, Utc};
 use diesel::QueryDsl;
 use diesel::{insert_into, update, Identifiable, Insertable, Queryable, RunQueryDsl, Selectable};
 use diesel::{ExpressionMethods, OptionalExtension};
+use ipnet::IpNet;
 
 #[derive(Queryable, Selectable, Identifiable, Insertable, Debug, PartialEq)]
 #[diesel(primary_key(user_id, token))]
 #[diesel(belongs_to(User))]
 #[diesel(table_name = confirmations)]
 pub struct Confirmation {
-    pub user_id: u32,
+    pub user_id: i32,
     pub action: ConfirmationAction,
     pub used: bool,
     pub date: NaiveDateTime,
     pub token: Vec<u8>,
     pub code_token: Vec<u8>,
-    pub code: u16,
-    pub code_trials: u8,
+    pub code: i16,
+    pub code_trials: i16,
     pub redirect_url: Option<String>,
     pub device_string: Option<String>,
-    pub ip_address: Option<Vec<u8>>,
+    pub ip_address: Option<IpNet>,
 }
 
 impl Confirmation {
     pub(crate) fn insert_confirmation(
         conn: &mut DBConn,
-        user_id: u32,
+        user_id: i32,
         action: ConfirmationAction,
         device_info: &DeviceInfo,
         redirect_url: &Option<String>,
         try_count: u8,
-    ) -> Result<(Vec<u8>, Vec<u8>, u16), ErrorResponder> {
+    ) -> Result<(Vec<u8>, Vec<u8>, i16), ErrorResponder> {
         let token = random_token(16);
         let code_token = random_token(16);
-        let code = random_code(4) as u16;
+        let code = random_code(4) as i16;
 
         insert_into(confirmations::table)
             .values((
-                confirmations::dsl::user_id.eq::<u32>(user_id),
+                confirmations::dsl::user_id.eq::<i32>(user_id),
                 confirmations::dsl::action.eq(&action),
                 confirmations::dsl::token.eq(&token),
                 confirmations::dsl::code_token.eq(&code_token),
                 confirmations::dsl::code.eq(&code),
                 confirmations::dsl::redirect_url.eq(redirect_url),
                 confirmations::dsl::device_string.eq(&device_info.device_string),
-                confirmations::dsl::ip_address.eq(inet6_aton(&device_info.ip_address)),
+                confirmations::dsl::ip_address.eq(&device_info.ip_address),
             ))
             .execute(conn)
             .map(|_| (token, code_token, code))
@@ -65,10 +66,10 @@ impl Confirmation {
     }
     pub fn check_code_and_mark_as_used(
         conn: &mut DBConn,
-        user_id: &u32,
+        user_id: &i32,
         action: &ConfirmationAction,
         code_token: &Vec<u8>,
-        code: &u16,
+        code: &i16,
         max_minutes: i64,
     ) -> Result<Option<String>, ErrorResponder> {
         let confirmation = confirmations::table
@@ -107,7 +108,7 @@ impl Confirmation {
     }
     pub fn check_token_and_mark_as_used(
         conn: &mut DBConn,
-        user_id: &u32,
+        user_id: &i32,
         action: &ConfirmationAction,
         token: &Vec<u8>,
         max_minutes: i64,
@@ -141,7 +142,7 @@ impl Confirmation {
             .map(|_| ())
             .map_err(|e| ErrorType::DatabaseError("Failed to mark confirmation as used".to_string(), e).res())
     }
-    pub fn mark_all_as_used(conn: &mut DBConn, user_id: &u32, action: ConfirmationAction) -> Result<(), ErrorResponder> {
+    pub fn mark_all_as_used(conn: &mut DBConn, user_id: &i32, action: ConfirmationAction) -> Result<(), ErrorResponder> {
         update(confirmations::table)
             .filter(confirmations::dsl::user_id.eq(user_id))
             .filter(confirmations::dsl::action.eq(action))

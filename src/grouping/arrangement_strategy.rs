@@ -19,12 +19,12 @@ pub struct ArrangementStrategy {
 }
 
 impl ArrangementStrategy {
-    pub fn get_dependant_arrangements(&self, conn: &mut DBConn) -> Result<Vec<u32>, ErrorResponder> {
+    pub fn get_dependant_arrangements(&self, conn: &mut DBConn) -> Result<Vec<i32>, ErrorResponder> {
         Arrangement::get_arrangements_from_groups_ids(conn, self.get_dependant_groups())
             .map(|arrangements| arrangements.iter().map(|a| a.id).collect())
     }
     /// Get the groups ids on which the strategy depends.
-    pub fn get_dependant_groups(&self) -> Vec<u32> {
+    pub fn get_dependant_groups(&self) -> Vec<i32> {
         let mut dependant_groups = self.filter.get_dependant_groups();
         dependant_groups.extend(self.groupings.get_dependant_groups());
         dependant_groups
@@ -48,14 +48,14 @@ pub enum ExifDataTypeValue {
     EditionDate(Vec<NaiveDateTime>),
     Latitude(Vec<BigDecimal>),
     Longitude(Vec<BigDecimal>),
-    Altitude(Vec<u16>),
+    Altitude(Vec<i16>),
     Orientation(Vec<PictureOrientation>),
-    Width(Vec<u16>),
-    Height(Vec<u16>),
+    Width(Vec<i16>),
+    Height(Vec<i16>),
     CameraBrand(Vec<String>),
     CameraModel(Vec<String>),
     FocalLength(Vec<BigDecimal>),
-    ExposureTime(Vec<(u32, u32)>),
-    IsoSpeed(Vec<u32>),
+    ExposureTime(Vec<(i32, i32)>),
+    IsoSpeed(Vec<i32>),
     FNumber(Vec<BigDecimal>),
 }

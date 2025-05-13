@@ -1,7 +1,6 @@
 use crate::database::database::DBConn;
 use crate::database::schema::*;
 use crate::database::user::user::User;
-use crate::database::utils::get_last_inserted_id;
 use crate::grouping::arrangement_strategy::ArrangementStrategy;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
@@ -15,8 +14,8 @@ use serde::Serialize;
 #[diesel(belongs_to(User))]
 #[diesel(table_name = arrangements)]
 pub struct Arrangement {
-    pub id: u32,
-    pub user_id: u32,
+    pub id: i32,
+    pub user_id: i32,
     pub name: String,
     pub strong_match_conversion: bool,
     pub strategy: Option<Vec<u8>>,
@@ -28,7 +27,7 @@ pub struct Arrangement {
 impl Arrangement {
     pub fn new(
         conn: &mut DBConn,
-        user_id: u32,
+        user_id: i32,
         name: String,
         strong_match_conversion: bool,
         strategy: ArrangementStrategy,
@@ -46,29 +45,26 @@ impl Arrangement {
             exif_dependant: strategy.is_exif_dependant(),
         };
 
-        let _ = diesel::insert_into(arrangements::table)
+        diesel::insert_into(arrangements::table)
             .values((
                 arrangements::name.eq(&arrangement.name),
                 arrangements::strategy.eq(&arrangement.strategy),
                 arrangements::strong_match_conversion.eq(&arrangement.strong_match_conversion),
             ))
-            .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
-
-        arrangement.id = get_last_inserted_id(conn)? as u32;
-        Ok(arrangement)
+            .get_result(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
-    pub fn from_user_id(conn: &mut DBConn, user_id: u32) -> Result<Vec<Arrangement>, ErrorResponder> {
+    pub fn from_user_id(conn: &mut DBConn, user_id: i32) -> Result<Vec<Arrangement>, ErrorResponder> {
         arrangements::table
             .filter(arrangements::user_id.eq(user_id))
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn from_id_and_user_id(conn: &mut DBConn, arrangement_id: u32, user_id: u32) -> Result<Arrangement, ErrorResponder> {
+    pub fn from_id_and_user_id(conn: &mut DBConn, arrangement_id: i32, user_id: i32) -> Result<Arrangement, ErrorResponder> {
         Self::from_id_and_user_id_opt(conn, arrangement_id, user_id)?.ok_or_else(|| ErrorType::ArrangementNotFound.res())
     }
-    pub fn from_id_and_user_id_opt(conn: &mut DBConn, arrangement_id: u32, user_id: u32) -> Result<Option<Arrangement>, ErrorResponder> {
+    pub fn from_id_and_user_id_opt(conn: &mut DBConn, arrangement_id: i32, user_id: i32) -> Result<Option<Arrangement>, ErrorResponder> {
         arrangements::table
             .filter(arrangements::id.eq(arrangement_id))
             .filter(arrangements::user_id.eq(user_id))
@@ -97,14 +93,14 @@ impl Arrangement {
     }
 
     /// List all user’s arrangements
-    pub fn list_arrangements(conn: &mut DBConn, user_id: u32) -> Result<Vec<Arrangement>, ErrorResponder> {
+    pub fn list_arrangements(conn: &mut DBConn, user_id: i32) -> Result<Vec<Arrangement>, ErrorResponder> {
         arrangements::table
             .filter(arrangements::user_id.eq(user_id))
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
     /// List all users’ non-manual arrangements, providing the deserialized strategy, the list of groups and the list of dependant arrangements
-    pub fn list_arrangements_and_groups(conn: &mut DBConn, user_id: u32) -> Result<Vec<ArrangementDetails>, ErrorResponder> {
+    pub fn list_arrangements_and_groups(conn: &mut DBConn, user_id: i32) -> Result<Vec<ArrangementDetails>, ErrorResponder> {
         let mut arrangements = Self::list_arrangements(conn, user_id)?
             .into_iter()
             .filter(|arrangement| arrangement.strategy.is_some())
@@ -133,7 +129,7 @@ impl Arrangement {
         Ok(arrangements)
     }
     /// Get all arrangements containing at least one of the provided groups
-    pub fn get_arrangements_from_groups_ids(conn: &mut DBConn, groups_ids: Vec<u32>) -> Result<Vec<Arrangement>, ErrorResponder> {
+    pub fn get_arrangements_from_groups_ids(conn: &mut DBConn, groups_ids: Vec<i32>) -> Result<Vec<Arrangement>, ErrorResponder> {
         Ok(arrangements::table
             .inner_join(groups::table.on(groups::arrangement_id.eq(arrangements::id)))
             .filter(groups::id.eq_any(groups_ids))
@@ -146,9 +142,9 @@ impl Arrangement {
 pub struct ArrangementDetails {
     pub arrangement: Arrangement,
     pub strategy: ArrangementStrategy,
-    pub dependant_groups: Vec<u32>, // Ids of the groups on which this arrangement’s strategy depends (directly determinateed from the arrangement strategy)
-    pub dependant_arrangements: Vec<u32>, // Ids of the arrangements on which this arrangement depends (got with set_dependant_arrangements_auto fetching the groups’s arrangements)
-    pub groups: Vec<u32>,
+    pub dependant_groups: Vec<i32>, // Ids of the groups on which this arrangement’s strategy depends (directly determinateed from the arrangement strategy)
+    pub dependant_arrangements: Vec<i32>, // Ids of the arrangements on which this arrangement depends (got with set_dependant_arrangements_auto fetching the groups’s arrangements)
+    pub groups: Vec<i32>,
 }
 impl ArrangementDetails {
     pub fn set_dependant_arrangements_auto(&mut self, all_arrangements_details: &Vec<ArrangementDetails>) {

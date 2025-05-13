@@ -7,6 +7,6 @@ use diesel::{Associations, Identifiable, Queryable, Selectable};
 #[diesel(belongs_to(User, foreign_key = user_id_1, foreign_key = user_id_2))]
 #[diesel(table_name = friends)]
 pub struct Friends {
-    pub user_id_1: u32,
-    pub user_id_2: u32,
+    pub user_id_1: i32,
+    pub user_id_2: i32,
 }

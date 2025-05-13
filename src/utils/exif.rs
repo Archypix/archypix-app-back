@@ -18,7 +18,7 @@ impl From<Metadata> for Picture {
         let gps_info = metadata.get_gps_info();
         let latitude = gps_val_to_big_decimal(gps_info.map(|g| g.latitude), 90, 6);
         let longitude = gps_val_to_big_decimal(gps_info.map(|g| g.longitude), 180, 6);
-        let altitude = gps_info.map(|g| g.altitude as u16);
+        let altitude = gps_info.map(|g| g.altitude as i16);
 
         let exposure_time = metadata.get_tag_rational("Exif.Photo.ExposureTime");
 
@@ -48,13 +48,13 @@ impl From<Metadata> for Picture {
             longitude,
             altitude,
             orientation,
-            width: metadata.get_pixel_width() as u16,
-            height: metadata.get_pixel_height() as u16,
+            width: metadata.get_pixel_width() as i16,
+            height: metadata.get_pixel_height() as i16,
             camera_brand: metadata.get_tag_string("Exif.Image.Make").ok(),
             camera_model: metadata.get_tag_string("Exif.Image.Model").ok(),
             focal_length: rational_to_big_decimal(metadata.get_tag_rational("Exif.Photo.FocalLengthIn35mmFilm"), 2),
-            exposure_time_num: exposure_time.map(|r| *r.numer() as u32),
-            exposure_time_den: exposure_time.map(|r| *r.denom() as u32),
+            exposure_time_num: exposure_time.map(|r| *r.numer() as i32),
+            exposure_time_den: exposure_time.map(|r| *r.denom() as i32),
             iso_speed: extract_iso(&metadata),
             f_number: rational_to_big_decimal(metadata.get_tag_rational("Exif.Photo.FNumber"), 1),
             size_ko: 0,
@@ -130,7 +130,7 @@ fn extract_first_tag(metadata: &Metadata, tags: &[&str]) -> Option<String> {
     None
 }
 
-fn extract_iso(metadata: &Metadata) -> Option<u32> {
+fn extract_iso(metadata: &Metadata) -> Option<i32> {
     let iso_tags = [
         "Exif.Photo.ISOSpeedRatings",
         "Exif.Photo.PhotographicSensitivity",
@@ -140,7 +140,7 @@ fn extract_iso(metadata: &Metadata) -> Option<u32> {
     for tag in &iso_tags {
         let value = metadata.get_tag_numeric(tag);
         if value != 0 {
-            return Some(value as u32);
+            return Some(value);
         }
     }
     None

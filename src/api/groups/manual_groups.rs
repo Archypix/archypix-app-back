@@ -9,15 +9,15 @@ use rocket_okapi::{openapi, JsonSchema};
 
 #[derive(Deserialize, JsonSchema)]
 pub struct CreateManualGroupRequest {
-    arrangement_id: u32,
+    arrangement_id: i32,
     name: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
 pub struct ModifyGroupPicturesRequest {
-    group_id: u32,
-    arrangement_id: u32,
-    picture_ids: Vec<u64>,
+    group_id: i32,
+    arrangement_id: i32,
+    picture_ids: Vec<i64>,
 }
 
 /// Create a new manual group

@@ -9,6 +9,6 @@ use diesel::{Associations, Identifiable, Queryable, Selectable};
 #[diesel(belongs_to(Picture))]
 #[diesel(table_name = groups_pictures)]
 pub struct GroupPicture {
-    pub group_id: u32,
-    pub picture_id: u64,
+    pub group_id: i32,
+    pub picture_id: i64,
 }

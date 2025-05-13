@@ -11,13 +11,13 @@ use diesel::{Associations, ExpressionMethods, Identifiable, JoinOnDsl, QueryDsl,
 #[diesel(belongs_to(Tag))]
 #[diesel(table_name = pictures_tags)]
 pub struct PictureTag {
-    pub picture_id: u64,
-    pub tag_id: u32,
+    pub picture_id: i64,
+    pub tag_id: i32,
 }
 
 impl PictureTag {
     /// Filter a pictures list against a tag
-    pub fn filter_pictures_from_tag(conn: &mut DBConn, tag_id: u32, picture_ids: &Vec<u64>) -> Result<Vec<u64>, ErrorResponder> {
+    pub fn filter_pictures_from_tag(conn: &mut DBConn, tag_id: i32, picture_ids: &Vec<i64>) -> Result<Vec<i64>, ErrorResponder> {
         pictures_tags::table
             .filter(pictures_tags::tag_id.eq(tag_id))
             .filter(pictures_tags::picture_id.eq_any(picture_ids))
@@ -26,7 +26,7 @@ impl PictureTag {
             .map_err(|e| ErrorType::DatabaseError("Failed to get tag pictures".to_string(), e).res())
     }
     /// Get all tags of a picture for a certain user
-    pub fn get_picture_tags(conn: &mut DBConn, picture_id: u64, user_id: u32) -> Result<Vec<u32>, ErrorResponder> {
+    pub fn get_picture_tags(conn: &mut DBConn, picture_id: i64, user_id: i32) -> Result<Vec<i32>, ErrorResponder> {
         pictures_tags::table
             .filter(pictures_tags::picture_id.eq(picture_id))
             // Check that the tag is owned by the owner

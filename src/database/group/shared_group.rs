@@ -13,16 +13,16 @@ use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
 #[diesel(belongs_to(Group))]
 #[diesel(table_name = shared_groups)]
 pub struct SharedGroup {
-    pub user_id: u32,
-    pub group_id: u32,
-    pub permissions: u8,
-    pub match_conversion_group_id: Option<u32>,
+    pub user_id: i32,
+    pub group_id: i32,
+    pub permissions: i16,
+    pub match_conversion_group_id: Option<i32>,
     pub copied: bool,
     pub confirmed: bool,
 }
 
 impl SharedGroup {
-    pub fn from_group_id(conn: &mut DBConn, group_id: u32) -> Result<Vec<SharedGroup>, ErrorResponder> {
+    pub fn from_group_id(conn: &mut DBConn, group_id: i32) -> Result<Vec<SharedGroup>, ErrorResponder> {
         shared_groups::table
             .filter(shared_groups::group_id.eq(group_id))
             .load(conn)

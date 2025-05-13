@@ -18,13 +18,13 @@ use serde::Serialize;
 #[diesel(belongs_to(Picture))]
 #[diesel(table_name = ratings)]
 pub struct Rating {
-    pub user_id: u32,
-    pub picture_id: u64,
-    pub rating: u8,
+    pub user_id: i32,
+    pub picture_id: i64,
+    pub rating: i16,
 }
 
 impl Rating {
-    pub fn from_picture_id(conn: &mut DBConn, picture_id: u64, user_id: u32) -> Result<Option<Rating>, ErrorResponder> {
+    pub fn from_picture_id(conn: &mut DBConn, picture_id: i64, user_id: i32) -> Result<Option<Rating>, ErrorResponder> {
         ratings::table
             .filter(ratings::dsl::picture_id.eq(picture_id))
             .filter(ratings::dsl::user_id.eq(user_id))
@@ -33,7 +33,7 @@ impl Rating {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
-    pub fn from_picture_id_including_friends(conn: &mut DBConn, picture_id: u64, user_id: u32) -> Result<Vec<Rating>, ErrorResponder> {
+    pub fn from_picture_id_including_friends(conn: &mut DBConn, picture_id: i64, user_id: i32) -> Result<Vec<Rating>, ErrorResponder> {
         ratings::table
             .filter(ratings::dsl::picture_id.eq(picture_id))
             .filter(

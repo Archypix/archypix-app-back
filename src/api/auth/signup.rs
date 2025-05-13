@@ -29,7 +29,7 @@ pub struct SignupData {
 
 #[derive(JsonSchema, Serialize, Debug)]
 pub struct SignupResponse {
-    pub(crate) user_id: u32,
+    pub(crate) user_id: i32,
     pub(crate) code_token: String,
 }
 
@@ -57,7 +57,7 @@ pub fn auth_signup(data: Json<SignupData>, db: &rocket::State<DBPool>, device_in
         context.insert("name", &data.name);
         context.insert("url", &signup_url);
         context.insert("code", &confirm_code_str);
-        context.insert("ip", &device_info.ip_address.unwrap_or("Unknown".to_string()));
+        context.insert("ip", &device_info.ip_address.map(|ip| ip.to_string()).unwrap_or("Unknown".to_string()));
         context.insert("agent", &device_info.device_string);
         send_rendered_email((data.name.clone(), data.email.clone()), subject, "confirm_signup".to_string(), context);
 

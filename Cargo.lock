@@ -129,6 +129,7 @@ dependencies = [
  "enum-kinds",
  "env_logger",
  "hex",
+    "ipnet",
  "itertools 0.14.0",
  "lazy_static",
  "lettre",
@@ -1284,13 +1285,14 @@ dependencies = [
  "byteorder",
  "chrono",
  "diesel_derives",
- "mysqlclient-sys",
+    "ipnet",
+    "itoa",
+    "libc",
  "num-bigint",
  "num-integer",
  "num-traits",
- "percent-encoding",
+    "pq-sys",
  "r2d2",
- "url",
 ]
 
 [[package]]
@@ -2276,6 +2278,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8fae54786f62fb2918dcfae3d568594e50eb9b5c25bf04371af6fe7516452fb"
 
 [[package]]
+name = "ipnet"
+version = "2.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "469fb0b9cefa57e3ef31275ee7cacb78f2fdca44e4765491884a2b119d4eb130"
+
+[[package]]
 name = "is-terminal"
 version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2604,17 +2612,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "version_check",
-]
-
-[[package]]
-name = "mysqlclient-sys"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fe45ac04fb301fa824ce6a3a0ef0171b52e92c6d25973c085cece9d88727bd7"
-dependencies = [
- "pkg-config",
- "semver",
- "vcpkg",
 ]
 
 [[package]]
@@ -3062,6 +3059,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "pq-sys"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41c852911b98f5981956037b2ca976660612e548986c30af075e753107bc3400"
+dependencies = [
+    "libc",
+    "vcpkg",
 ]
 
 [[package]]

@@ -1,17 +1,16 @@
 services:
-  archypix-app-db:
-    image: mysql:8.4
-    container_name: archypix-app-db
+  archypix-app-postgres:
+    image: postgres:17
+    container_name: archypix-app-postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: archypix
-      MYSQL_DATABASE: archypix
-      MYSQL_USER: archypix
-      MYSQL_PASSWORD: archypix
+      POSTGRES_PASSWORD: archypix
+      POSTGRES_DB: archypix
+      POSTGRES_USER: archypix
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - ./data/db:/var/lib/mysql
+      - ./data/postgres:/var/lib/postgresql/data
 
   archypix-app-minio:
     image: minio/minio:latest
@@ -32,12 +31,12 @@ services:
     container_name: archypix-app-back
     restart: unless-stopped
     depends_on:
-      - archypix-app-db
+      - archypix-app-postgres
       - archypix-app-minio
     ports:
       - "8000:80"
     environment:
-      - DATABASE_URL=mysql://user:password@host:3306/database
+      - DATABASE_URL=postgres://user:password@host:5432/database
       - SMTP_SERVER=$SMTP_SERVER
       - SMTP_SERVER_PORT=$SMTP_SERVER_PORT
       - SMTP_FROM_NAME=$SMTP_FROM_NAME

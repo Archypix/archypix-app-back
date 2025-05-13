@@ -1,7 +1,6 @@
 use crate::database::database::DBConn;
 use crate::database::schema::*;
 use crate::database::tag::tag_group::TagGroup;
-use crate::database::utils::get_last_inserted_id;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::query_dsl::InternalJoinDsl;
 use diesel::{
@@ -16,8 +15,8 @@ use serde::{Deserialize, Serialize};
 #[diesel(belongs_to(TagGroup))]
 #[diesel(table_name = tags)]
 pub struct Tag {
-    pub id: u32,
-    pub tag_group_id: u32,
+    pub id: i32,
+    pub tag_group_id: i32,
     pub name: String,
     pub color: Vec<u8>,
     pub is_default: bool,
@@ -25,17 +24,15 @@ pub struct Tag {
 
 impl Tag {
     pub fn insert(conn: &mut DBConn, mut tag: Tag) -> Result<Tag, ErrorResponder> {
-        let _ = diesel::insert_into(tags::table)
+        diesel::insert_into(tags::table)
             .values((
                 tags::tag_group_id.eq(tag.tag_group_id),
                 tags::name.eq(&tag.name.clone()),
                 tags::color.eq(tag.color.clone()),
                 tags::is_default.eq(tag.is_default),
             ))
-            .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
-        tag.id = get_last_inserted_id(conn)? as u32;
-        Ok(tag)
+            .get_result(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
     // Edit a tag name, color, and default
     pub fn patch(conn: &mut DBConn, tag: Tag) -> Result<Tag, ErrorResponder> {
@@ -47,13 +44,13 @@ impl Tag {
     }
 
     /// List all TagGroup's tags
-    pub fn list_tags(conn: &mut DBConn, tag_group_id: u32) -> Result<Vec<Tag>, ErrorResponder> {
+    pub fn list_tags(conn: &mut DBConn, tag_group_id: i32) -> Result<Vec<Tag>, ErrorResponder> {
         tags::table
             .filter(tags::tag_group_id.eq(tag_group_id))
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn from_id_with_tag_group(conn: &mut DBConn, tag_id: u32) -> Result<(Tag, TagGroup), ErrorResponder> {
+    pub fn from_id_with_tag_group(conn: &mut DBConn, tag_id: i32) -> Result<(Tag, TagGroup), ErrorResponder> {
         tags::table
             .inner_join(tag_groups::table.on(tags::tag_group_id.eq(tag_groups::id)))
             .filter(tags::id.eq(tag_id))
@@ -61,23 +58,23 @@ impl Tag {
             .first(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn from_id(conn: &mut DBConn, tag_id: u32) -> Result<Tag, ErrorResponder> {
+    pub fn from_id(conn: &mut DBConn, tag_id: i32) -> Result<Tag, ErrorResponder> {
         Self::from_id_opt(conn, tag_id)?.ok_or_else(|| ErrorType::TagNotFound.res())
     }
-    pub fn from_id_opt(conn: &mut DBConn, tag_id: u32) -> Result<Option<Tag>, ErrorResponder> {
+    pub fn from_id_opt(conn: &mut DBConn, tag_id: i32) -> Result<Option<Tag>, ErrorResponder> {
         tags::table
             .find(tag_id)
             .first(conn)
             .optional()
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn from_ids(conn: &mut DBConn, tag_ids: Vec<u32>) -> Result<Vec<Tag>, ErrorResponder> {
+    pub fn from_ids(conn: &mut DBConn, tag_ids: Vec<i32>) -> Result<Vec<Tag>, ErrorResponder> {
         tags::table
             .filter(tags::id.eq_any(tag_ids))
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn delete(conn: &mut DBConn, id: u32) -> Result<usize, ErrorResponder> {
+    pub fn delete(conn: &mut DBConn, id: i32) -> Result<usize, ErrorResponder> {
         // Delete all pictures with this tag
         diesel::delete(pictures_tags::table.filter(pictures_tags::tag_id.eq(id)))
             .execute(conn)
@@ -88,7 +85,7 @@ impl Tag {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
-    pub fn add_pictures(conn: &mut DBConn, tag_id: u32, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+    pub fn add_pictures(conn: &mut DBConn, tag_id: i32, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
         let values: Vec<_> = picture_ids
             .into_iter()
             .map(|pic_id| (pictures_tags::tag_id.eq(tag_id), pictures_tags::picture_id.eq(pic_id)))
@@ -99,7 +96,7 @@ impl Tag {
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn add_pictures_batch(conn: &mut DBConn, tag_ids: Vec<u32>, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+    pub fn add_pictures_batch(conn: &mut DBConn, tag_ids: Vec<i32>, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
         let values: Vec<_> = tag_ids
             .iter()
             .flat_map(|tag_id| {
@@ -115,14 +112,14 @@ impl Tag {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
-    pub fn remove_pictures(conn: &mut DBConn, tag_id: u32, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+    pub fn remove_pictures(conn: &mut DBConn, tag_id: i32, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
         diesel::delete(pictures_tags::table)
             .filter(pictures_tags::tag_id.eq(tag_id))
             .filter(pictures_tags::picture_id.eq_any(picture_ids))
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn remove_pictures_batch(conn: &mut DBConn, tag_ids: Vec<u32>, picture_ids: Vec<u64>) -> Result<usize, ErrorResponder> {
+    pub fn remove_pictures_batch(conn: &mut DBConn, tag_ids: Vec<i32>, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
         diesel::delete(pictures_tags::table)
             .filter(pictures_tags::tag_id.eq_any(tag_ids))
             .filter(pictures_tags::picture_id.eq_any(picture_ids))

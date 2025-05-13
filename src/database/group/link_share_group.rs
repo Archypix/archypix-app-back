@@ -8,6 +8,6 @@ use diesel::{Associations, Identifiable, Queryable, Selectable};
 #[diesel(table_name = link_share_groups)]
 pub struct LinkShareGroups {
     pub token: Vec<u8>,
-    pub group_id: u32,
-    pub permissions: u8,
+    pub group_id: i32,
+    pub permissions: i16,
 }

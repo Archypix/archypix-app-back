@@ -19,7 +19,7 @@ pub struct PatchTagGroupRequest {
     pub edited_tag_group: TagGroup,
     pub new_tags: Vec<Tag>,
     pub edited_tags: Vec<Tag>,
-    pub deleted_tags_ids: Vec<u32>,
+    pub deleted_tags_ids: Vec<i32>,
 }
 
 /// Get all tags groups and all tags of the user
@@ -162,7 +162,7 @@ pub async fn patch_tag_group(data: Json<PatchTagGroupRequest>, db: &State<DBPool
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct IDOnly {
-    pub id: u32,
+    pub id: i32,
 }
 
 /// Delete an existing tag group
@@ -191,8 +191,8 @@ pub async fn delete_tag_group(data: Json<IDOnly>, db: &State<DBPool>, user: User
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct TagIdWithPictureIds {
-    pub tag_id: u32,
-    pub picture_ids: Vec<u64>,
+    pub tag_id: i32,
+    pub picture_ids: Vec<i64>,
 }
 
 /// Add a tag to a list of pictures
@@ -254,9 +254,9 @@ pub async fn remove_tag_from_pictures(db: &State<DBPool>, user: User, data: Json
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct EditPictureTagsRequest {
-    pub picture_ids: Vec<u64>,
-    pub add_tag_ids: Vec<u32>,
-    pub remove_tag_ids: Vec<u32>,
+    pub picture_ids: Vec<i64>,
+    pub add_tag_ids: Vec<i32>,
+    pub remove_tag_ids: Vec<i32>,
 }
 
 /// Edit tags of a list of pictures
@@ -265,7 +265,7 @@ pub struct EditPictureTagsRequest {
 /// If the tag is required, the picture will be tagged with the default tag of the tag group.
 #[openapi(tag = "Tags")]
 #[patch("/picture_tags", data = "<data>")]
-pub async fn edit_picture_tags(db: &State<DBPool>, user: User, data: Json<EditPictureTagsRequest>) -> Result<Json<Vec<u32>>, ErrorResponder> {
+pub async fn edit_picture_tags(db: &State<DBPool>, user: User, data: Json<EditPictureTagsRequest>) -> Result<Json<Vec<i32>>, ErrorResponder> {
     let mut conn: &mut DBConn = &mut db.get().unwrap();
     if data.picture_ids.len() == 0 {
         return ErrorType::UnprocessableEntity.res_err();

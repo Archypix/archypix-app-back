@@ -1,20 +1,18 @@
-use diesel::mysql::MysqlConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use std::env;
 
-pub type DBPool = Pool<ConnectionManager<MysqlConnection>>;
-pub type DBConn = PooledConnection<ConnectionManager<MysqlConnection>>;
+pub type DBPool = Pool<ConnectionManager<PgConnection>>;
+pub type DBConn = PooledConnection<ConnectionManager<PgConnection>>;
 
-pub fn get_connection() -> MysqlConnection {
+pub fn get_connection() -> PgConnection {
     let url = get_database_url();
-    MysqlConnection::establish(&url)
-        .unwrap_or_else(|_| panic!("Error connecting to {}", url))
+    PgConnection::establish(&url).unwrap_or_else(|_| panic!("Error connecting to {}", url))
 }
 
-pub fn get_connection_pool() -> Pool<ConnectionManager<MysqlConnection>> {
+pub fn get_connection_pool() -> Pool<ConnectionManager<PgConnection>> {
     let url = get_database_url();
-    let manager = ConnectionManager::<MysqlConnection>::new(url.clone());
+    let manager = ConnectionManager::<PgConnection>::new(url.clone());
 
     Pool::builder()
         .test_on_check_out(true)

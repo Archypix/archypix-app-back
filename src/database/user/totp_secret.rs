@@ -12,36 +12,36 @@ use totp_rs::{Rfc6238, TOTP};
 #[diesel(belongs_to(User))]
 #[diesel(table_name = totp_secrets)]
 pub struct TOTPSecret {
-    pub user_id: u32,
+    pub user_id: i32,
     pub creation_date: NaiveDateTime,
     pub secret: Vec<u8>,
 }
 
 impl TOTPSecret {
-    pub fn insert_secret_for_user(conn: &mut DBConn, user_id: &u32, secret: &Vec<u8>) -> Result<(), ErrorResponder> {
+    pub fn insert_secret_for_user(conn: &mut DBConn, user_id: &i32, secret: &Vec<u8>) -> Result<(), ErrorResponder> {
         insert_into(totp_secrets::table)
             .values((totp_secrets::dsl::user_id.eq(user_id), totp_secrets::dsl::secret.eq(secret)))
             .execute(conn)
             .map(|_| ())
             .map_err(|e| ErrorType::DatabaseError("Failed to insert TOTP secret".to_string(), e).res())
     }
-    pub fn has_user_totp(conn: &mut DBConn, user_id: &u32) -> Result<bool, ErrorResponder> {
+    pub fn has_user_totp(conn: &mut DBConn, user_id: &i32) -> Result<bool, ErrorResponder> {
         totp_secrets::table
             .filter(totp_secrets::dsl::user_id.eq(user_id))
             .select(totp_secrets::dsl::user_id)
-            .first::<u32>(conn)
+            .first::<i32>(conn)
             .optional()
             .map(|opt| opt.is_some())
             .map_err(|e| ErrorType::DatabaseError("Failed to check if user has TOTP".to_string(), e).res())
     }
-    pub fn get_user_totp_secrets(conn: &mut DBConn, user_id: &u32) -> Result<Vec<TOTPSecret>, ErrorResponder> {
+    pub fn get_user_totp_secrets(conn: &mut DBConn, user_id: &i32) -> Result<Vec<TOTPSecret>, ErrorResponder> {
         totp_secrets::table
             .filter(totp_secrets::dsl::user_id.eq(user_id))
             .select(TOTPSecret::as_select())
             .load::<TOTPSecret>(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to get user TOTP secrets".to_string(), e).res())
     }
-    pub fn check_user_totp(conn: &mut DBConn, user_id: &u32, code: &str) -> Result<bool, ErrorResponder> {
+    pub fn check_user_totp(conn: &mut DBConn, user_id: &i32, code: &str) -> Result<bool, ErrorResponder> {
         let secrets = TOTPSecret::get_user_totp_secrets(conn, user_id)?;
         for secret in secrets {
             if secret

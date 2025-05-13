@@ -51,7 +51,7 @@ pub async fn create_arrangement(db: &State<DBPool>, user: User, data: Json<Arran
 pub async fn edit_arrangement(
     db: &State<DBPool>,
     user: User,
-    arrangement_id: u32,
+    arrangement_id: i32,
     request: Json<ArrangementRequest>,
 ) -> Result<Json<ArrangementResponse>, ErrorResponder> {
     let mut conn = &mut db.get().unwrap();
@@ -71,7 +71,7 @@ pub async fn edit_arrangement(
 /// Delete an arrangement
 #[openapi(tag = "Arrangement")]
 #[delete("/arrangement/<arrangement_id>")]
-pub async fn delete_arrangement(db: &State<DBPool>, user: User, arrangement_id: u32) -> Result<(), ErrorResponder> {
+pub async fn delete_arrangement(db: &State<DBPool>, user: User, arrangement_id: i32) -> Result<(), ErrorResponder> {
     let mut conn = &mut db.get().unwrap();
     let arrangement = Arrangement::from_id_and_user_id(conn, arrangement_id, user.id)?;
 
