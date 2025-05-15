@@ -8,6 +8,7 @@ use crate::database::schema::shared_groups;
 use crate::database::tag::tag::Tag;
 use crate::grouping::strategy_grouping::StrategyGrouping;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use itertools::Itertools;
 use rocket::yansi::Paint;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -31,7 +32,6 @@ pub fn group_new_pictures(
     user_id: i32,
     picture_ids_filter: Option<&Vec<i64>>,
     arrangement_id_filter: Option<i32>,
-    already_processed_users: &mut HashSet<i32>,
 ) -> Result<(), ErrorResponder> {
     // Fetch all not manual arrangements and the list of their group ids
     let mut arrangements = Arrangement::list_arrangements_and_groups(conn, user_id)?;
@@ -75,12 +75,12 @@ pub fn group_new_pictures(
                     };
                     let group_pictures = filter.filter_pictures(conn, Some(pictures_to_group))?;
                     remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                    add_pictures_to_group_and_group_via_shared_group(conn, &group_pictures, *group_id, already_processed_users)?;
+                    add_pictures_to_group_and_group_via_shared_group(conn, &group_pictures, *group_id)?;
                 }
                 if remaining_pictures_ids.len() != 0 {
                     let (other_group_id, update) = filter_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
                     update_strategy = update;
-                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id, already_processed_users)?;
+                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id)?;
                 }
             }
             StrategyGrouping::GroupByTags(tag_grouping) => {
@@ -97,13 +97,13 @@ pub fn group_new_pictures(
                         let (group_id, update) = tag_grouping.get_or_create_tag_group_id(conn, &tag, arrangement.arrangement.id)?;
                         update_strategy |= update;
                         remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                        add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, group_id, already_processed_users)?;
+                        add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, group_id)?;
                     }
                 }
                 if remaining_pictures_ids.len() != 0 {
                     let (other_group_id, update) = tag_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
                     update_strategy |= update;
-                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id, already_processed_users)?;
+                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id)?;
                 }
             }
             StrategyGrouping::GroupByExifValues(e) => {}
@@ -116,43 +116,49 @@ pub fn group_new_pictures(
             arrangement.arrangement.set_strategy(conn, strategy)?;
         }
     }
-    already_processed_users.insert(user_id);
 
     Ok(())
 }
 
 /// Add pictures to a group and then check for each user to which the group is shared:
-/// - Group the pictures on which the user gained access in his context.
+/// - Group the pictures to which the user gained access in his context.
 /// - If share match conversion is enabled, apply it to all pictures.
-pub fn add_pictures_to_group_and_group_via_shared_group(
-    conn: &mut DBConn,
-    picture_ids: &Vec<i64>,
-    group_id: i32,
-    already_processed_users: &mut HashSet<i32>,
-) -> Result<(), ErrorResponder> {
+pub fn add_pictures_to_group_and_group_via_shared_group(conn: &mut DBConn, picture_ids: &Vec<i64>, group_id: i32) -> Result<(), ErrorResponder> {
+    if picture_ids.len() == 0 {
+        return Ok(());
+    }
     let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
 
-    let mut users_accessible_pictures = HashMap::new();
-
+    // Save the pictures that are already accessible to each recipient of a shared instance of this group.
+    let mut users_accessible_pictures: HashMap<i32, HashSet<i64>> = HashMap::new();
     for shared_group in shared_groups.iter() {
-        // TODO: Even if the user to which the group is shared already has access to the picture, we need to apply share match conversion.
-        //  If the user has just gained access to the picture, in addition to share match conversion should be applied the grouping strategies.
-
-        // TODO: check if the user has access to the pictures.
-        let accessible_pictures = Picture::filter_user_accessible_pictures(conn, shared_group.user_id, picture_ids)?;
-        if accessible_pictures.len() != 0 {
-            users_accessible_pictures.insert(shared_group.user_id, accessible_pictures);
+        let mut accessible_pictures =
+            HashSet::from_iter(Picture::filter_user_accessible_pictures(conn, shared_group.user_id, picture_ids)?.into_iter());
+        if let Some(already_accessible_pictures) = users_accessible_pictures.get(&shared_group.user_id) {
+            accessible_pictures = already_accessible_pictures.union(&accessible_pictures).into_iter().cloned().collect()
         }
+        users_accessible_pictures.insert(shared_group.user_id, accessible_pictures);
     }
 
-    Group::add_pictures(conn, group_id, picture_ids)?;
+    let added_pictures: HashSet<i64> = HashSet::from_iter(Group::add_pictures(conn, group_id, picture_ids)?);
 
     for shared_group in shared_groups {
+        let empty_hashset = HashSet::new();
+        let accessible_pictures = users_accessible_pictures.get(&shared_group.user_id).unwrap_or(&empty_hashset);
 
-        // TODO: Group new pictures on which the user gained access to.
-        // group_new_pictures(conn, shared_group.user_id, Some(picture_ids), None, already_processed_users)?;
+        // Group new pictures on which the user gained access to.
+        let gained_access_pictures = added_pictures.difference(accessible_pictures);
+        group_new_pictures(
+            conn,
+            shared_group.user_id,
+            Some(&Vec::from_iter(gained_access_pictures.into_iter().cloned())),
+            None,
+        )?;
 
-        // TODO: apply share match conversion if enabled.
+        // Applying share match conversion if enabled.
+        if let Some(smc_group_id) = shared_group.match_conversion_group_id {
+            // TODO: Apply share match conversion on pictures added_pictures for user shared_group.user_id and destination group smc_group_id
+        }
     }
 
     Ok(())

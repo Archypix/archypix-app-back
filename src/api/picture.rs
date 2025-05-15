@@ -101,8 +101,7 @@ pub async fn add_picture(
             // TODO: add to default tags
 
             let pictures = vec![picture.id];
-            let mut already_processed_users = HashSet::new();
-            group_new_pictures(conn, user.id, Some(&pictures), None, &mut already_processed_users).map_err(|e| e.with_rollback(true))?;
+            group_new_pictures(conn, user.id, Some(&pictures), None).map_err(|e| e.with_rollback(true))?;
 
             // Upload file to S3
             task::block_in_place(|| {

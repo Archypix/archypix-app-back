@@ -49,7 +49,8 @@ impl Group {
         self.arrangement_id
     }
 
-    pub fn add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
+    // Adds a picture to the group and returns the vec of added picture ids (the ones that were not already in the group)
+    pub fn add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<Vec<i64>, ErrorResponder> {
         let values: Vec<_> = picture_ids
             .into_iter()
             .map(|pic_id| (groups_pictures::group_id.eq(group_id), groups_pictures::picture_id.eq(*pic_id)))
@@ -57,7 +58,9 @@ impl Group {
 
         diesel::insert_into(groups_pictures::table)
             .values(&values)
-            .execute(conn)
+            .on_conflict_do_nothing()
+            .returning(groups_pictures::picture_id)
+            .get_results(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
