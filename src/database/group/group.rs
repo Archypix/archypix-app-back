@@ -1,4 +1,5 @@
 use crate::database::database::DBConn;
+use crate::database::group::arrangement;
 use crate::database::group::arrangement::Arrangement;
 use crate::database::schema::*;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
@@ -44,6 +45,14 @@ impl Group {
             .first(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
+    pub fn from_user_id(conn: &mut DBConn, user_id: i32) -> Result<Vec<Group>, ErrorResponder> {
+        groups::table
+            .inner_join(arrangements::table.on(groups::arrangement_id.eq(arrangements::id)))
+            .filter(arrangements::user_id.eq(user_id))
+            .select(Group::as_select())
+            .load(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
 
     pub fn arrangement_id(&self) -> i32 {
         self.arrangement_id
@@ -64,11 +73,12 @@ impl Group {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
-    pub fn remove_pictures(&self, conn: &mut DBConn, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
+    pub fn remove_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<Vec<i64>, ErrorResponder> {
         diesel::delete(groups_pictures::table)
-            .filter(groups_pictures::group_id.eq(self.id))
+            .filter(groups_pictures::group_id.eq(group_id))
             .filter(groups_pictures::picture_id.eq_any(picture_ids))
-            .execute(conn)
+            .returning(groups_pictures::picture_id)
+            .get_results(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 }

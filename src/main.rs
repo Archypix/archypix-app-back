@@ -78,6 +78,11 @@ pub mod database {
 pub mod grouping {
     //automod::dir!(pub "src/grouping");
     pub mod arrangement_strategy;
+    pub mod group_by_exif_interval;
+    pub mod group_by_exif_value;
+    pub mod group_by_filter;
+    pub mod group_by_location;
+    pub mod group_by_tag;
     pub mod grouping_process;
     pub mod strategy_filtering;
     pub mod strategy_grouping;

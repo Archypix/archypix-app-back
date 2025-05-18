@@ -2,10 +2,12 @@ use crate::database::database::DBPool;
 use crate::database::group::arrangement::Arrangement;
 use crate::database::group::group::Group;
 use crate::database::user::user::User;
+use crate::grouping::grouping_process::{group_add_pictures, group_remove_pictures};
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use rocket::serde::{json::Json, Deserialize};
 use rocket::State;
 use rocket_okapi::{openapi, JsonSchema};
+use std::collections::HashSet;
 
 #[derive(Deserialize, JsonSchema)]
 pub struct CreateManualGroupRequest {
@@ -51,8 +53,8 @@ pub async fn add_pictures_to_group(db: &State<DBPool>, user: User, request: Json
             return Err(ErrorType::GroupIsNotManual.res_no_rollback());
         }
         // Get the group and verify it belongs to the arrangement
-        Group::add_pictures(conn, request.group_id, &request.picture_ids)?;
-        // TODO: Update the pictures on the accounts to which this group is shared.
+        let group = Group::from_id_and_arrangement(conn, request.group_id, request.arrangement_id)?;
+        group_add_pictures(conn, group.id, &request.picture_ids)?;
         Ok(())
     })
 }
@@ -71,8 +73,7 @@ pub async fn remove_pictures_from_group(db: &State<DBPool>, user: User, request:
         }
         // Get the group and verify it belongs to the arrangement
         let group = Group::from_id_and_arrangement(conn, request.group_id, request.arrangement_id)?;
-        group.remove_pictures(conn, &request.picture_ids)?;
-        // TODO: Update the pictures on the accounts to which this group is shared.
+        group_remove_pictures(conn, group.id, &request.picture_ids)?;
         Ok(())
     })
 }

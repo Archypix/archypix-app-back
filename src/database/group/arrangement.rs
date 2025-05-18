@@ -4,7 +4,7 @@ use crate::database::user::user::User;
 use crate::grouping::arrangement_strategy::ArrangementStrategy;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, PooledConnection};
+use diesel::r2d2::PooledConnection;
 use diesel::{Associations, Identifiable, Queryable, Selectable};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -106,14 +106,12 @@ impl Arrangement {
             .filter(|arrangement| arrangement.strategy.is_some())
             .map(|arrangement| {
                 let strategy = arrangement.get_strategy()?.unwrap();
-                let groups = strategy.groupings.get_groups();
                 let dependant_groups = strategy.get_dependant_groups();
                 Ok::<ArrangementDetails, ErrorResponder>(ArrangementDetails {
                     arrangement,
                     strategy,
                     dependant_groups,
                     dependant_arrangements: vec![],
-                    groups,
                 })
             })
             .collect::<Result<Vec<ArrangementDetails>, ErrorResponder>>()?;
@@ -144,13 +142,12 @@ pub struct ArrangementDetails {
     pub strategy: ArrangementStrategy,
     pub dependant_groups: Vec<i32>, // Ids of the groups on which this arrangement’s strategy depends (directly determinateed from the arrangement strategy)
     pub dependant_arrangements: Vec<i32>, // Ids of the arrangements on which this arrangement depends (got with set_dependant_arrangements_auto fetching the groups’s arrangements)
-    pub groups: Vec<i32>,
 }
 impl ArrangementDetails {
     pub fn set_dependant_arrangements_auto(&mut self, all_arrangements_details: &Vec<ArrangementDetails>) {
         self.dependant_arrangements = all_arrangements_details
             .iter()
-            .filter(|arr| arr.groups.iter().any(|g| self.dependant_groups.contains(g)))
+            .filter(|arr| arr.strategy.groupings.get_groups().iter().any(|g| self.dependant_groups.contains(g)))
             .map(|arr| arr.arrangement.id)
             .clone()
             .collect();

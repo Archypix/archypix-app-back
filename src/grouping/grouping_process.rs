@@ -6,13 +6,13 @@ use crate::database::picture::picture::Picture;
 use crate::database::picture::picture_tag::PictureTag;
 use crate::database::tag::tag::Tag;
 use crate::grouping::strategy_filtering::FilterType;
-use crate::grouping::strategy_grouping::StrategyGrouping;
+use crate::grouping::strategy_grouping::{StrategyGrouping, StrategyGroupingTrait, UngroupRecord};
 use crate::grouping::topological_sorts::{topological_sort, topological_sort_filtered, topological_sort_from};
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
-use std::cmp::Ordering;
+use itertools::Itertools;
+use rocket::yansi::Paint;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::Hash;
-use validator::ValidateRequired;
 // Process:
 // - Create arrangement:
 //   Group only on this arrangement as no other arrangement can reference it.
@@ -78,58 +78,27 @@ pub fn group_pictures(
         topological_sort(arrangements)
     };
 
-    for mut arrangement in arrangements.iter_mut() {
+    let mut ungroup_record = UngroupRecord::new(do_ungroup);
+
+    for arrangement in arrangements.iter_mut() {
         // Keep only pictures that match this arrangement
         info!(
             "Grouping pictures into arrangement: {:?} of user {:?}",
             arrangement.arrangement.id, user_id
         );
 
-        let pictures_ids = arrangement.strategy.filter.filter_pictures(conn, picture_ids_filter)?;
+        let pictures_ids: HashSet<i64> = HashSet::from_iter(arrangement.strategy.filter.filter_pictures(conn, picture_ids_filter)?.into_iter());
 
         // Add pictures to groups
         let mut update_strategy = false;
+        let a_id = arrangement.arrangement.id;
+        let preserve_unicity = arrangement.strategy.preserve_unicity;
         match &mut arrangement.strategy.groupings {
             StrategyGrouping::GroupByFilter(filter_grouping) => {
-                let mut remaining_pictures_ids = pictures_ids.clone();
-                for (filter, group_id) in &filter_grouping.filters {
-                    let pictures_to_group = if arrangement.strategy.preserve_unicity {
-                        &remaining_pictures_ids
-                    } else {
-                        &pictures_ids
-                    };
-                    let group_pictures = filter.filter_pictures(conn, Some(pictures_to_group))?;
-                    remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                    group_add_pictures(conn, &group_pictures, *group_id)?;
-                }
-                if remaining_pictures_ids.len() != 0 {
-                    let (other_group_id, update) = filter_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
-                    update_strategy = update;
-                    group_add_pictures(conn, &remaining_pictures_ids, other_group_id)?;
-                }
+                update_strategy |= filter_grouping.group_pictures(conn, a_id, preserve_unicity, &mut ungroup_record, &pictures_ids)?;
             }
             StrategyGrouping::GroupByTags(tag_grouping) => {
-                let mut remaining_pictures_ids = pictures_ids.clone();
-                let tags = Tag::list_tags(conn, tag_grouping.tag_group_id)?;
-                for tag in tags {
-                    let pictures_to_group = if arrangement.strategy.preserve_unicity {
-                        &remaining_pictures_ids
-                    } else {
-                        &pictures_ids
-                    };
-                    let group_pictures = PictureTag::filter_pictures_from_tag(conn, tag.id, pictures_to_group)?;
-                    if group_pictures.len() != 0 {
-                        let (group_id, update) = tag_grouping.get_or_create_tag_group_id(conn, &tag, arrangement.arrangement.id)?;
-                        update_strategy |= update;
-                        remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                        group_add_pictures(conn, &remaining_pictures_ids, group_id)?;
-                    }
-                }
-                if remaining_pictures_ids.len() != 0 {
-                    let (other_group_id, update) = tag_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
-                    update_strategy |= update;
-                    group_add_pictures(conn, &remaining_pictures_ids, other_group_id)?;
-                }
+                update_strategy |= tag_grouping.group_pictures(conn, a_id, preserve_unicity, &mut ungroup_record, &pictures_ids)?;
             }
             StrategyGrouping::GroupByExifValues(e) => {}
             StrategyGrouping::GroupByExifInterval(e) => {}
@@ -138,85 +107,48 @@ pub fn group_pictures(
 
         if update_strategy {
             let strategy = arrangement.strategy.clone();
-            arrangement.groups = strategy.groupings.get_groups();
             arrangement.arrangement.set_strategy(conn, strategy)?;
         }
     }
 
     if do_ungroup {
-        // Ungrouping any picture that is in a group of any related arrangement, but does not match the group anymore.
+        // Add records for pictures that do not match the arrangement filter
         for arrangement in arrangements.iter() {
             info!(
                 "Ungrouping pictures from arrangement: {:?} of user {:?}",
                 arrangement.arrangement.id, user_id
             );
-            let arrangement_filter = &arrangement.strategy.filter;
-            match &arrangement.strategy.groupings {
-                StrategyGrouping::GroupByFilter(filter_grouping) => {
-                    for (filter, group_id) in &filter_grouping.filters {
-                        let ungroup_pictures = filter
-                            .clone()
-                            .not()
-                            .or(arrangement_filter.clone().not())
-                            .and(FilterType::IncludeGroups(vec![*group_id]).to_strategy())
-                            .filter_pictures(conn, None)?;
+            // Pictures that do not match the arrangement filter, but that are in a group of the arrangement.
+            let group_ids = arrangement.strategy.groupings.get_groups().clone();
+            let ungroup_pictures_ids = arrangement
+                .strategy
+                .filter
+                .clone()
+                .not()
+                .and(FilterType::IncludeGroups(group_ids.clone()).to_strategy())
+                .filter_pictures(conn, picture_ids_filter)?;
 
-                        group_remove_pictures(conn, &ungroup_pictures, *group_id)?;
-                    }
-                }
-                StrategyGrouping::GroupByTags(tag_grouping) => {
-                    for tag in Tag::list_tags(conn, tag_grouping.tag_group_id)? {
-                        // let ungroup_pictures = PictureTag::filter_pictures_from_tag(conn, tag.id, None)?;
-                        // group_remove_pictures(conn, &ungroup_pictures, tag_grouping.tag_id_to_group_id[&tag.id])?;
-                    }
-                }
-                StrategyGrouping::GroupByExifValues(e) => {}
-                StrategyGrouping::GroupByExifInterval(e) => {}
-                StrategyGrouping::GroupByLocation(l) => {}
-            }
+            let ungroup_pictures_ids_set = HashSet::from_iter(ungroup_pictures_ids.into_iter());
+            group_ids.into_iter().for_each(|group_id| {
+                ungroup_record.add(group_id, ungroup_pictures_ids_set.clone());
+            });
         }
+        // Ungroup all records
+        ungroup_record
+            .map
+            .into_iter()
+            .try_for_each(|(group_id, picture_ids)| group_remove_pictures(conn, group_id, &picture_ids.into_iter().collect_vec()))?;
     }
 
     Ok(())
 }
-
-/*/// Ungroup any picture from the picture_ids list that is in a group but does not match the group anymore.
-/// - Sort the arrangements that match the dependency type in topological order.
-/// - For each arrangement group,
-///   - remove pictures that don't match the arrangement filter, or that don’t match the group
-///   - do not matter about shared groups as this will be handled after an eventual regrouping in regroup_edited_pictures.
-///   - and return the list of the removed pictures,
-/// - Return a hashmap with the group id as key and the list of removed pictures as value.
-fn ungroup_pictures(
-    conn: &mut DBConn,
-    user_id: i32,
-    picture_ids: &Vec<i64>,
-    dependency_type: &ArrangementDependencyType,
-) -> Result<(), ErrorResponder> {
-    todo!();
-
-}
-
-/// Ungroup pictures that do not match a group anymore and then group them back.
-/// - Calling ungroup_pictures and storing the removed pictures.
-/// - Calling group_pictures to regroup the pictures as if they were new pictures.
-/// - Propagating ungrouped pictures to the shared groups.
-///   This is done only after to prevent the recipient from losing access to the pictures immediately before gaining access back.
-pub fn regroup_edited_pictures(
-    conn: &mut DBConn,
-    user_id: i32,
-    picture_ids: &Vec<i64>,
-    dependency_type: &ArrangementDependencyType,
-) -> Result<(), ErrorResponder> {
-    todo!();
-}*/
 
 /// Add pictures to a group and then check for each user to which the group is shared:
 /// - For the pictures the user gained access to:
 ///   - Add the defaults tags to these pictures.
 ///   - Group them in his context.
 /// - If share match conversion is enabled, apply it to all pictures.
-fn group_add_pictures(conn: &mut DBConn, picture_ids: &Vec<i64>, group_id: i32) -> Result<(), ErrorResponder> {
+pub fn group_add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<(), ErrorResponder> {
     if picture_ids.len() == 0 {
         return Ok(());
     }
@@ -258,11 +190,25 @@ fn group_add_pictures(conn: &mut DBConn, picture_ids: &Vec<i64>, group_id: i32) 
     Ok(())
 }
 
-pub fn group_remove_pictures(conn: &mut DBConn, picture_ids: &Vec<i64>, group_id: i32) -> Result<(), ErrorResponder> {
+/// Remove the pictures from the group, and remove them from all groups of users who lost access to them.
+pub fn group_remove_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<(), ErrorResponder> {
     if picture_ids.len() == 0 {
         return Ok(());
     }
-    let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
 
-    todo!()
+    let removed_pictures = Group::remove_pictures(conn, group_id, &picture_ids)?;
+    if removed_pictures.len() == 0 {
+        return Ok(());
+    }
+
+    let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
+    for shared_group in shared_groups.iter() {
+        let unaccessible_pictures = Picture::filter_user_accessible_pictures(conn, shared_group.user_id, &removed_pictures)?;
+
+        // Delete pictures from user groups
+        Group::from_user_id(conn, shared_group.user_id)?
+            .into_iter()
+            .try_for_each(|group| group_remove_pictures(conn, group.id, &unaccessible_pictures))?;
+    }
+    Ok(())
 }

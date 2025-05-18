@@ -309,6 +309,23 @@ impl Picture {
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to get accessible pictures".to_string(), e).res())
     }
+    pub fn filter_user_unaccessible_pictures(conn: &mut DBConn, user_id: i32, picture_ids: &Vec<i64>) -> Result<Vec<i64>, ErrorResponder> {
+        pictures::table
+            // Join with shared pictures
+            .left_join(
+                groups_pictures::table
+                    .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
+                    .on(groups_pictures::dsl::picture_id.eq(pictures::dsl::id)),
+            )
+            // Filter disallowed pictures
+            .filter(not(shared_groups::dsl::user_id.eq(user_id).and(pictures::dsl::owner_id.eq(user_id))))
+            // Filter requested pictures
+            .filter(pictures::dsl::id.eq_any(picture_ids))
+            .select(pictures::dsl::id)
+            .distinct()
+            .load(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get accessible pictures".to_string(), e).res())
+    }
     pub fn is_picture_publicly_shared(conn: &mut DBConn, picture_id: i64) -> Result<bool, ErrorResponder> {
         let shared_count = groups_pictures::table
             .inner_join(link_share_groups::table.on(link_share_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))

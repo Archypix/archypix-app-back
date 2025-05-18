@@ -1,7 +1,8 @@
 use crate::database::group::arrangement::{Arrangement, ArrangementDetails};
 use crate::grouping::arrangement_strategy::ArrangementStrategy;
+use crate::grouping::group_by_tag::TagGrouping;
 use crate::grouping::strategy_filtering::FilterType;
-use crate::grouping::strategy_grouping::{StrategyGrouping, TagGrouping};
+use crate::grouping::strategy_grouping::StrategyGrouping;
 use crate::grouping::topological_sorts::{topological_sort, topological_sort_from};
 use std::collections::{HashMap, VecDeque};
 
@@ -37,7 +38,6 @@ pub fn create_arrangement_with_dependant_arrangements(id: i32, dependant_arrange
         },
         dependant_groups: vec![],
         dependant_arrangements,
-        groups: vec![],
     }
 }
 pub fn create_arrangement_with_dependant_groups(id: i32, groups: Vec<i32>, dependant_groups: Vec<i32>) -> ArrangementDetails {
@@ -53,7 +53,7 @@ pub fn create_arrangement_with_dependant_groups(id: i32, groups: Vec<i32>, depen
             exif_dependant: false,
         },
         strategy: ArrangementStrategy {
-            filter: FilterType::IncludeGroups(vec![1, 5]).to_strategy(),
+            filter: FilterType::IncludeGroups(groups).to_strategy(),
             groupings: StrategyGrouping::GroupByTags(TagGrouping {
                 tag_group_id: 0,
                 tag_id_to_group_id: HashMap::new(),
@@ -64,7 +64,6 @@ pub fn create_arrangement_with_dependant_groups(id: i32, groups: Vec<i32>, depen
         },
         dependant_groups,
         dependant_arrangements: vec![],
-        groups,
     }
 }
 
