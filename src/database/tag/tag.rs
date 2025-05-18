@@ -84,46 +84,4 @@ impl Tag {
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-
-    pub fn add_pictures(conn: &mut DBConn, tag_id: i32, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
-        let values: Vec<_> = picture_ids
-            .into_iter()
-            .map(|pic_id| (pictures_tags::tag_id.eq(tag_id), pictures_tags::picture_id.eq(pic_id)))
-            .collect();
-
-        diesel::insert_into(pictures_tags::table)
-            .values(&values)
-            .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
-    }
-    pub fn add_pictures_batch(conn: &mut DBConn, tag_ids: Vec<i32>, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
-        let values: Vec<_> = tag_ids
-            .iter()
-            .flat_map(|tag_id| {
-                picture_ids
-                    .iter()
-                    .map(move |pic_id| (pictures_tags::tag_id.eq(tag_id), pictures_tags::picture_id.eq(pic_id)))
-            })
-            .collect();
-
-        diesel::insert_into(pictures_tags::table)
-            .values(&values)
-            .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
-    }
-
-    pub fn remove_pictures(conn: &mut DBConn, tag_id: i32, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
-        diesel::delete(pictures_tags::table)
-            .filter(pictures_tags::tag_id.eq(tag_id))
-            .filter(pictures_tags::picture_id.eq_any(picture_ids))
-            .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
-    }
-    pub fn remove_pictures_batch(conn: &mut DBConn, tag_ids: Vec<i32>, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
-        diesel::delete(pictures_tags::table)
-            .filter(pictures_tags::tag_id.eq_any(tag_ids))
-            .filter(pictures_tags::picture_id.eq_any(picture_ids))
-            .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
-    }
 }

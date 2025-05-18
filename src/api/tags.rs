@@ -212,9 +212,9 @@ pub async fn add_tag_to_pictures(db: &State<DBPool>, user: User, data: Json<TagI
 
     err_transaction(&mut conn, |conn| {
         if !tag_group.multiple {
-            tag_group.remove_pictures(conn, data.picture_ids.clone())?;
+            tag_group.remove_pictures(conn, &data.picture_ids)?;
         }
-        Tag::add_pictures(conn, tag.id, data.picture_ids.clone())?;
+        PictureTag::add_pictures(conn, tag.id, &data.picture_ids)?;
 
         // TODO: check these pictures against arrangement that depends on tag groups.
 
@@ -238,7 +238,7 @@ pub async fn remove_tag_from_pictures(db: &State<DBPool>, user: User, data: Json
     }
 
     err_transaction(&mut conn, |conn| {
-        Tag::remove_pictures(conn, tag.id, data.picture_ids.clone())?;
+        PictureTag::remove_pictures(conn, tag.id, &data.picture_ids)?;
         if tag_group.required {
             // Get the default tag of the group
             let default_tag = Tag::list_tags(conn, tag_group.id.unwrap())?
@@ -246,7 +246,7 @@ pub async fn remove_tag_from_pictures(db: &State<DBPool>, user: User, data: Json
                 .find(|tag| tag.is_default)
                 .ok_or_else(|| ErrorType::InternalError("Required tag group without any default tag".to_string()).res())?;
             // Add the default tag to the pictures
-            TagGroup::add_default_tag_to_pictures_without_tag_from_list(conn, default_tag.id, tag_group.id.unwrap(), data.picture_ids.clone())?;
+            TagGroup::add_default_tag_to_pictures_without_tag_from_list(conn, default_tag.id, tag_group.id.unwrap(), &data.picture_ids)?;
         }
         Ok(())
     })
@@ -331,16 +331,16 @@ pub async fn edit_picture_tags(db: &State<DBPool>, user: User, data: Json<EditPi
 
     err_transaction(&mut conn, |conn| {
         // Remove tags
-        Tag::remove_pictures_batch(conn, data.remove_tag_ids.clone(), data.picture_ids.clone())?;
+        PictureTag::remove_pictures_batch(conn, &data.remove_tag_ids, &data.picture_ids)?;
 
         // Remove all tags for multiple tag groups before adding new tags
         for tgwt in add_tgwt {
             if !tgwt.tag_group.multiple {
-                tgwt.tag_group.remove_pictures(conn, data.picture_ids.clone())?;
+                tgwt.tag_group.remove_pictures(conn, &data.picture_ids)?;
             }
         }
         // Add tags
-        Tag::add_pictures_batch(conn, data.add_tag_ids.clone(), data.picture_ids.clone())?;
+        PictureTag::add_pictures_batch(conn, &data.add_tag_ids, &data.picture_ids)?;
 
         // Add default tags for required tag groups
         for tgwt in remove_tgwt {
@@ -351,12 +351,7 @@ pub async fn edit_picture_tags(db: &State<DBPool>, user: User, data: Json<EditPi
                     .find(|tag| tag.is_default)
                     .ok_or_else(|| ErrorType::InternalError("Required tag group without any default tag".to_string()).res())?;
                 // Add the default tag to the pictures
-                TagGroup::add_default_tag_to_pictures_without_tag_from_list(
-                    conn,
-                    default_tag.id,
-                    tgwt.tag_group.id.unwrap(),
-                    data.picture_ids.clone(),
-                )?;
+                TagGroup::add_default_tag_to_pictures_without_tag_from_list(conn, default_tag.id, tgwt.tag_group.id.unwrap(), &data.picture_ids)?;
             }
         }
 

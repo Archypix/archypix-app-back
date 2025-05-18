@@ -76,7 +76,12 @@ pub mod database {
     }
 }
 pub mod grouping {
-    automod::dir!(pub "src/grouping");
+    //automod::dir!(pub "src/grouping");
+    pub mod arrangement_strategy;
+    pub mod grouping_process;
+    pub mod strategy_filtering;
+    pub mod strategy_grouping;
+    pub mod topological_sorts;
     pub mod tests {
         #[cfg(test)]
         pub mod arrangement_sort_algorithms;

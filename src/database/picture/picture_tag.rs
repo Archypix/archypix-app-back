@@ -2,8 +2,11 @@ use crate::database::database::DBConn;
 use crate::database::picture::picture::Picture;
 use crate::database::schema::*;
 use crate::database::tag::tag::Tag;
+use crate::database::tag::tag_group::TagGroup;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use diesel::dsl::{exists, not};
 use diesel::{Associations, ExpressionMethods, Identifiable, JoinOnDsl, QueryDsl, Queryable, RunQueryDsl, Selectable};
+use itertools::Itertools;
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
 #[diesel(primary_key(picture_id, tag_id))]
@@ -36,5 +39,84 @@ impl PictureTag {
             .select(pictures_tags::tag_id)
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to get picture tags".to_string(), e).res())
+    }
+
+    pub fn add_pictures(conn: &mut DBConn, tag_id: i32, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
+        let values: Vec<_> = picture_ids
+            .into_iter()
+            .map(|pic_id| (pictures_tags::tag_id.eq(tag_id), pictures_tags::picture_id.eq(pic_id)))
+            .collect();
+
+        diesel::insert_into(pictures_tags::table)
+            .values(&values)
+            .on_conflict_do_nothing()
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn add_pictures_batch(conn: &mut DBConn, tag_ids: &Vec<i32>, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
+        let values: Vec<_> = tag_ids
+            .iter()
+            .flat_map(|tag_id| {
+                picture_ids
+                    .iter()
+                    .map(move |pic_id| (pictures_tags::tag_id.eq(tag_id), pictures_tags::picture_id.eq(pic_id)))
+            })
+            .collect();
+
+        diesel::insert_into(pictures_tags::table)
+            .values(&values)
+            .on_conflict_do_nothing()
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn remove_pictures(conn: &mut DBConn, tag_id: i32, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
+        diesel::delete(pictures_tags::table)
+            .filter(pictures_tags::tag_id.eq(tag_id))
+            .filter(pictures_tags::picture_id.eq_any(picture_ids))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn remove_pictures_batch(conn: &mut DBConn, tag_ids: &Vec<i32>, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
+        diesel::delete(pictures_tags::table)
+            .filter(pictures_tags::tag_id.eq_any(tag_ids))
+            .filter(pictures_tags::picture_id.eq_any(picture_ids))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+
+    /// Add all the users’ default tags to a list of pictures.
+    pub fn add_default_tags(conn: &mut DBConn, user_id: i32, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
+        let default_tags = tags::table
+            .inner_join(tag_groups::table.on(tag_groups::id.eq(tags::tag_group_id)))
+            .filter(tag_groups::user_id.eq(user_id))
+            .filter(tags::is_default.eq(true))
+            .select(tags::id)
+            .load::<i32>(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get default tags".to_string(), e).res())?;
+
+        Self::add_pictures_batch(conn, &default_tags, picture_ids)
+    }
+
+    /// For every tag group of the user, add the defaults tags of the tag group only to provided pictures that have not any tag of this tag group.
+    pub fn add_default_tags_to_pictures_without_tags(conn: &mut DBConn, user_id: i32, picture_ids: &Vec<i64>) -> Result<(), ErrorResponder> {
+        TagGroup::list_all_tags_as_tag_group_with_tags(conn, user_id)?
+            .iter()
+            .try_for_each(|tgwt| {
+                let pictures_without_tag = pictures::table
+                    .filter(pictures::id.eq_any(picture_ids))
+                    .filter(not(exists(
+                        pictures_tags::table
+                            .inner_join(tags::table.on(tags::id.eq(pictures_tags::tag_id)))
+                            .filter(pictures_tags::picture_id.eq(pictures::id))
+                            .filter(tags::tag_group_id.eq(tgwt.tag_group.id.unwrap())),
+                    )))
+                    .select(pictures::id)
+                    .load::<i64>(conn)
+                    .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+
+                let default_tags = tgwt.tags.iter().filter(|t| t.is_default).map(|t| t.id).collect_vec();
+                Self::add_pictures_batch(conn, &default_tags, &pictures_without_tag)?;
+                Ok(())
+            })
     }
 }

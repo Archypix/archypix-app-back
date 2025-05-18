@@ -1,43 +1,66 @@
 use crate::database::database::DBConn;
-use crate::database::group::arrangement::{Arrangement, ArrangementDetails};
+use crate::database::group::arrangement::{Arrangement, ArrangementDependencyType, ArrangementDetails};
 use crate::database::group::group::Group;
 use crate::database::group::shared_group::SharedGroup;
 use crate::database::picture::picture::Picture;
 use crate::database::picture::picture_tag::PictureTag;
-use crate::database::schema::shared_groups;
 use crate::database::tag::tag::Tag;
+use crate::grouping::strategy_filtering::FilterType;
 use crate::grouping::strategy_grouping::StrategyGrouping;
+use crate::grouping::topological_sorts::{topological_sort, topological_sort_filtered, topological_sort_from};
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
-use itertools::Itertools;
-use rocket::yansi::Paint;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet, VecDeque};
-// Requirements:
+use std::hash::Hash;
+use validator::ValidateRequired;
+// Process:
 // - Create arrangement:
 //   Group only on this arrangement as no other arrangement can reference it.
 // - Edit arrangement:
+//   Clear the arrangements groups. If possible do a difference system to skip unchanged pictured.
+//   If needed to recreate groups, establish a mapping with references and shared groups.
 //   Group only on this arrangement and all arrangement that depends on it recursively.
 // - Delete arrangement:
-//   No grouping to do, just deleting all the groups after making sure that no other arrangement depends on it.
-// - Add new picture / edit picture attributes:
+//   Make sure there are no dependent arrangements or shared groups.
+//   Delete the groups and the arrangement
+//
+// - Add a new picture:
 //   Group the picture against all arrangements in topological order.
+// - Edit picture attributes
+//   Remove the pictures from the groups it doesn’t match anymore (from arrangements matching the dependency type).
+//   Group the picture against all arrangements matching the dependency type in topological order.
+//   Remove the picture from the shared groups associated with the groups in the step 1.
+//   If possible, establish a difference to prevent removing the picture from other user contexts .
+// - Delete pictures permanently:
+//   Just cascade delete the picture. No reference will stay.
+//
+//
 // |                    | Pictures | Arrangements
 // |--------------------|----------|-------------------
 // | Create arrangement | All      | Created
 // | Edit   arrangement | All      | Edited + Dependants
 // | Add/Edit  pictures | Edited   | All
 
-pub fn group_new_pictures(
+pub fn group_pictures(
     conn: &mut DBConn,
     user_id: i32,
     picture_ids_filter: Option<&Vec<i64>>,
     arrangement_id_filter: Option<i32>,
+    dependency_type_filter: Option<&ArrangementDependencyType>,
+    do_ungroup: bool,
 ) -> Result<(), ErrorResponder> {
     // Fetch all not manual arrangements and the list of their group ids
     let mut arrangements = Arrangement::list_arrangements_and_groups(conn, user_id)?;
 
+    if arrangement_id_filter.is_some() && dependency_type_filter.is_some() {
+        return Err(ErrorType::InvalidInput("Cannot filter by arrangement id and dependency type at the same time".to_string()).res());
+    }
+    if do_ungroup && picture_ids_filter.is_none() {
+        return Err(ErrorType::InvalidInput("Cannot ungroup without a list of picture ids".to_string()).res());
+    }
+
     // Filter arrangements if needed
-    if let Some(arrangement_id) = arrangement_id_filter {
+    arrangements = if let Some(arrangement_id) = arrangement_id_filter {
         let origin_arrangement = arrangements
             .iter()
             .find(|arrangement| arrangement.arrangement.id == arrangement_id)
@@ -48,10 +71,12 @@ pub fn group_new_pictures(
             .clone();
 
         arrangements.retain(|arrangement| arrangement.arrangement.groups_dependant || arrangement_id == arrangement.arrangement.id);
-        arrangements = topological_sort_from(arrangements, &origin_arrangement);
+        topological_sort_from(arrangements, &origin_arrangement)
+    } else if let Some(dependency_type) = dependency_type_filter {
+        topological_sort_filtered(arrangements, dependency_type)
     } else {
-        arrangements = topological_sort(arrangements);
-    }
+        topological_sort(arrangements)
+    };
 
     for mut arrangement in arrangements.iter_mut() {
         // Keep only pictures that match this arrangement
@@ -75,12 +100,12 @@ pub fn group_new_pictures(
                     };
                     let group_pictures = filter.filter_pictures(conn, Some(pictures_to_group))?;
                     remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                    add_pictures_to_group_and_group_via_shared_group(conn, &group_pictures, *group_id)?;
+                    group_add_pictures(conn, &group_pictures, *group_id)?;
                 }
                 if remaining_pictures_ids.len() != 0 {
                     let (other_group_id, update) = filter_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
                     update_strategy = update;
-                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id)?;
+                    group_add_pictures(conn, &remaining_pictures_ids, other_group_id)?;
                 }
             }
             StrategyGrouping::GroupByTags(tag_grouping) => {
@@ -97,13 +122,13 @@ pub fn group_new_pictures(
                         let (group_id, update) = tag_grouping.get_or_create_tag_group_id(conn, &tag, arrangement.arrangement.id)?;
                         update_strategy |= update;
                         remaining_pictures_ids.retain(|&x| group_pictures.contains(&x));
-                        add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, group_id)?;
+                        group_add_pictures(conn, &remaining_pictures_ids, group_id)?;
                     }
                 }
                 if remaining_pictures_ids.len() != 0 {
                     let (other_group_id, update) = tag_grouping.get_or_create_other_group_id(conn, arrangement.arrangement.id)?;
                     update_strategy |= update;
-                    add_pictures_to_group_and_group_via_shared_group(conn, &remaining_pictures_ids, other_group_id)?;
+                    group_add_pictures(conn, &remaining_pictures_ids, other_group_id)?;
                 }
             }
             StrategyGrouping::GroupByExifValues(e) => {}
@@ -113,17 +138,85 @@ pub fn group_new_pictures(
 
         if update_strategy {
             let strategy = arrangement.strategy.clone();
+            arrangement.groups = strategy.groupings.get_groups();
             arrangement.arrangement.set_strategy(conn, strategy)?;
+        }
+    }
+
+    if do_ungroup {
+        // Ungrouping any picture that is in a group of any related arrangement, but does not match the group anymore.
+        for arrangement in arrangements.iter() {
+            info!(
+                "Ungrouping pictures from arrangement: {:?} of user {:?}",
+                arrangement.arrangement.id, user_id
+            );
+            let arrangement_filter = &arrangement.strategy.filter;
+            match &arrangement.strategy.groupings {
+                StrategyGrouping::GroupByFilter(filter_grouping) => {
+                    for (filter, group_id) in &filter_grouping.filters {
+                        let ungroup_pictures = filter
+                            .clone()
+                            .not()
+                            .or(arrangement_filter.clone().not())
+                            .and(FilterType::IncludeGroups(vec![*group_id]).to_strategy())
+                            .filter_pictures(conn, None)?;
+
+                        group_remove_pictures(conn, &ungroup_pictures, *group_id)?;
+                    }
+                }
+                StrategyGrouping::GroupByTags(tag_grouping) => {
+                    for tag in Tag::list_tags(conn, tag_grouping.tag_group_id)? {
+                        // let ungroup_pictures = PictureTag::filter_pictures_from_tag(conn, tag.id, None)?;
+                        // group_remove_pictures(conn, &ungroup_pictures, tag_grouping.tag_id_to_group_id[&tag.id])?;
+                    }
+                }
+                StrategyGrouping::GroupByExifValues(e) => {}
+                StrategyGrouping::GroupByExifInterval(e) => {}
+                StrategyGrouping::GroupByLocation(l) => {}
+            }
         }
     }
 
     Ok(())
 }
 
+/*/// Ungroup any picture from the picture_ids list that is in a group but does not match the group anymore.
+/// - Sort the arrangements that match the dependency type in topological order.
+/// - For each arrangement group,
+///   - remove pictures that don't match the arrangement filter, or that don’t match the group
+///   - do not matter about shared groups as this will be handled after an eventual regrouping in regroup_edited_pictures.
+///   - and return the list of the removed pictures,
+/// - Return a hashmap with the group id as key and the list of removed pictures as value.
+fn ungroup_pictures(
+    conn: &mut DBConn,
+    user_id: i32,
+    picture_ids: &Vec<i64>,
+    dependency_type: &ArrangementDependencyType,
+) -> Result<(), ErrorResponder> {
+    todo!();
+
+}
+
+/// Ungroup pictures that do not match a group anymore and then group them back.
+/// - Calling ungroup_pictures and storing the removed pictures.
+/// - Calling group_pictures to regroup the pictures as if they were new pictures.
+/// - Propagating ungrouped pictures to the shared groups.
+///   This is done only after to prevent the recipient from losing access to the pictures immediately before gaining access back.
+pub fn regroup_edited_pictures(
+    conn: &mut DBConn,
+    user_id: i32,
+    picture_ids: &Vec<i64>,
+    dependency_type: &ArrangementDependencyType,
+) -> Result<(), ErrorResponder> {
+    todo!();
+}*/
+
 /// Add pictures to a group and then check for each user to which the group is shared:
-/// - Group the pictures to which the user gained access in his context.
+/// - For the pictures the user gained access to:
+///   - Add the defaults tags to these pictures.
+///   - Group them in his context.
 /// - If share match conversion is enabled, apply it to all pictures.
-pub fn add_pictures_to_group_and_group_via_shared_group(conn: &mut DBConn, picture_ids: &Vec<i64>, group_id: i32) -> Result<(), ErrorResponder> {
+fn group_add_pictures(conn: &mut DBConn, picture_ids: &Vec<i64>, group_id: i32) -> Result<(), ErrorResponder> {
     if picture_ids.len() == 0 {
         return Ok(());
     }
@@ -148,12 +241,13 @@ pub fn add_pictures_to_group_and_group_via_shared_group(conn: &mut DBConn, pictu
 
         // Group new pictures on which the user gained access to.
         let gained_access_pictures = added_pictures.difference(accessible_pictures);
-        group_new_pictures(
-            conn,
-            shared_group.user_id,
-            Some(&Vec::from_iter(gained_access_pictures.into_iter().cloned())),
-            None,
-        )?;
+        let gained_access_pictures = Vec::from_iter(gained_access_pictures.into_iter().cloned());
+
+        // Even if the picture is newly accessible, it can already have tags from the time it was accessible.
+        // Then, we are adding defaults tags only to pictures that have no tag from the group.
+        PictureTag::add_default_tags_to_pictures_without_tags(conn, shared_group.user_id, &gained_access_pictures)?;
+
+        group_pictures(conn, shared_group.user_id, Some(&gained_access_pictures), None, None, false)?;
 
         // Applying share match conversion if enabled.
         if let Some(smc_group_id) = shared_group.match_conversion_group_id {
@@ -164,112 +258,11 @@ pub fn add_pictures_to_group_and_group_via_shared_group(conn: &mut DBConn, pictu
     Ok(())
 }
 
-/// Sort the arrangements in topological order keeping only the subtree being the origin arrangement and its dependants.
-/// First explore all arrangements that depend on the origin arrangement
-/// Then apply a topological sort on these arrangements only.
-pub fn topological_sort_from(arrangements: Vec<ArrangementDetails>, origin_arrangement: &ArrangementDetails) -> Vec<ArrangementDetails> {
-    let mut visited: HashSet<i32> = HashSet::new();
-    let mut processing: VecDeque<i32> = VecDeque::new(); // arrangement_id, group_ids
-
-    visited.insert(origin_arrangement.arrangement.id);
-    processing.push_back(origin_arrangement.arrangement.id);
-
-    // Process the arrangements that depend on the processing arrangement
-    while let Some(processing_id) = processing.pop_front() {
-        let new_processing_ids = arrangements
-            .iter()
-            // Keep only arrangements that are not already visited
-            .filter(|a| !visited.contains(&a.arrangement.id))
-            // Keep only arrangements that depend on processing_a
-            .filter(|a| a.dependant_arrangements.contains(&processing_id))
-            .map(|a| a.arrangement.id)
-            .collect::<Vec<i32>>();
-
-        for new_processing_id in new_processing_ids {
-            visited.insert(new_processing_id);
-            processing.push_back(new_processing_id);
-        }
+pub fn group_remove_pictures(conn: &mut DBConn, picture_ids: &Vec<i64>, group_id: i32) -> Result<(), ErrorResponder> {
+    if picture_ids.len() == 0 {
+        return Ok(());
     }
+    let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
 
-    // Remove arrangements that have not been visited
-    let arrangements = arrangements
-        .into_iter()
-        .filter(|a| visited.contains(&a.arrangement.id))
-        .collect::<Vec<ArrangementDetails>>();
-
-    // Sort topologically the remaining arrangements.
-    topological_sort(arrangements)
-}
-
-/// Topologically sort the arrangements in function of their dependencies over a group of another arrangement.
-/// If A depends on B, B will appear before A in the sorted list.
-pub fn topological_sort(mut arrangements: Vec<ArrangementDetails>) -> Vec<ArrangementDetails> {
-    let mut sorted = Vec::new();
-    let mut visited = HashSet::new();
-    let mut temp_stack = HashSet::new();
-
-    let mut id_map: HashMap<i32, &ArrangementDetails> = HashMap::new();
-    for arrangement in &arrangements {
-        id_map.insert(arrangement.arrangement.id, arrangement);
-    }
-
-    debug!(
-        "Sorting topologically arrangements: {:?}",
-        arrangements.iter().map(|a| a.arrangement.id).collect::<Vec<i32>>()
-    );
-    // Recursive DFS helper for topological sort
-    fn visit<'a>(
-        node_id: i32,
-        id_map: &'a HashMap<i32, &'a ArrangementDetails>,
-        visited: &mut HashSet<i32>,
-        temp_stack: &mut HashSet<i32>,
-        sorted: &mut Vec<i32>,
-    ) -> Result<(), String> {
-        // Detect a cycle
-        if temp_stack.contains(&node_id) {
-            info!("Cycle detected in dependency graph");
-            return Ok(()); //Err("Cycle detected in dependency graph".to_string());
-        }
-        if visited.contains(&node_id) {
-            return Ok(()); // Already processed
-        }
-
-        // Temporarily mark this node
-        temp_stack.insert(node_id);
-
-        debug!("    Looking for dependents of arrangement {}", node_id);
-        // Process all dependencies of this node
-        if let Some(node) = id_map.get(&node_id) {
-            for &dep in &node.dependant_arrangements {
-                debug!("      Found dependency of {} : {}", node_id, dep);
-                visit(dep, id_map, visited, temp_stack, sorted)?;
-            }
-        }
-
-        // Mark this node as fully processed and add to the result
-        temp_stack.remove(&node_id);
-        visited.insert(node_id);
-        sorted.push(node_id);
-        Ok(())
-    }
-
-    // Execute the topological sort for all nodes
-    for arrangement in id_map.values() {
-        debug!("  Starting DFS from arrangement ID: {}", arrangement.arrangement.id);
-        let _res = visit(arrangement.arrangement.id, &id_map, &mut visited, &mut temp_stack, &mut sorted);
-    }
-
-    let sorted_indices: HashMap<i32, usize> = sorted.iter().enumerate().map(|(i, &id)| (id, i)).collect();
-
-    // Sort the owned values
-    arrangements.sort_by(|a, b| {
-        if let Some(i) = sorted_indices.get(&a.arrangement.id) {
-            if let Some(i2) = sorted_indices.get(&b.arrangement.id) {
-                return i.cmp(i2);
-            }
-            return Ordering::Less;
-        }
-        Ordering::Greater
-    });
-    arrangements
+    todo!()
 }

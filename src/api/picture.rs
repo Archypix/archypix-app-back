@@ -1,9 +1,10 @@
 use crate::api::query_pictures::{PictureFilter, PictureSort, PicturesQuery};
 use crate::database::database::{DBConn, DBPool};
 use crate::database::picture::picture::{Picture, PictureDetails};
+use crate::database::picture::picture_tag::PictureTag;
 use crate::database::schema::pictures::{edition_date, width};
 use crate::database::user::user::User;
-use crate::grouping::grouping_process::group_new_pictures;
+use crate::grouping::grouping_process::group_pictures;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorResponse, ErrorType};
 use crate::utils::s3::PictureStorer;
 use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};
@@ -97,11 +98,11 @@ pub async fn add_picture(
         // Database operations
         let picture = err_transaction(conn, |conn| {
             let picture = Picture::insert(conn, user.id, file_name.clone(), meta, file_size_ko)?;
-
-            // TODO: add to default tags
-
             let pictures = vec![picture.id];
-            group_new_pictures(conn, user.id, Some(&pictures), None).map_err(|e| e.with_rollback(true))?;
+            // Adding default tags
+            PictureTag::add_default_tags(conn, user.id, &pictures)?;
+            // Grouping pictures
+            group_pictures(conn, user.id, Some(&pictures), None, None, false).map_err(|e| e.with_rollback(true))?;
 
             // Upload file to S3
             task::block_in_place(|| {

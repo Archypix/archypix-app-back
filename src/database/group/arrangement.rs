@@ -165,3 +165,59 @@ impl PartialEq for ArrangementDetails {
         self.arrangement.id != other.arrangement.id
     }
 }
+
+pub struct ArrangementDependencyType {
+    pub groups_dependant: bool,
+    pub tags_dependant: bool,
+    pub exif_dependant: bool,
+}
+
+impl ArrangementDependencyType {
+    pub fn new_groups_dependant() -> Self {
+        Self {
+            groups_dependant: true,
+            tags_dependant: false,
+            exif_dependant: false,
+        }
+    }
+    pub fn new_tags_dependant() -> Self {
+        Self {
+            groups_dependant: false,
+            tags_dependant: true,
+            exif_dependant: false,
+        }
+    }
+    pub fn new_exif_dependant() -> Self {
+        Self {
+            groups_dependant: false,
+            tags_dependant: false,
+            exif_dependant: true,
+        }
+    }
+    /// Returns true if at least one of the dependencies of this type matches one of the provided.
+    pub fn match_any(&self, other: &Self) -> bool {
+        (self.groups_dependant && other.groups_dependant)
+            || (self.tags_dependant && other.tags_dependant)
+            || (self.exif_dependant && other.exif_dependant)
+    }
+}
+
+impl From<&Arrangement> for ArrangementDependencyType {
+    fn from(a: &Arrangement) -> Self {
+        ArrangementDependencyType {
+            groups_dependant: a.groups_dependant,
+            tags_dependant: a.tags_dependant,
+            exif_dependant: a.exif_dependant,
+        }
+    }
+}
+
+impl From<&ArrangementDetails> for ArrangementDependencyType {
+    fn from(ad: &ArrangementDetails) -> Self {
+        ArrangementDependencyType {
+            groups_dependant: ad.arrangement.groups_dependant,
+            tags_dependant: ad.arrangement.tags_dependant,
+            exif_dependant: ad.arrangement.exif_dependant,
+        }
+    }
+}

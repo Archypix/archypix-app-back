@@ -1,4 +1,5 @@
 use crate::database::database::DBConn;
+use crate::database::picture::picture_tag::PictureTag;
 use crate::database::schema::*;
 use crate::database::tag::tag::Tag;
 use crate::database::user::user::User;
@@ -146,7 +147,7 @@ impl TagGroup {
         conn: &mut DBConn,
         default_tag_id: i32,
         tag_group_id: i32,
-        picture_ids: Vec<i64>,
+        picture_ids: &Vec<i64>,
     ) -> Result<(), ErrorResponder> {
         // Get all pictures in that vec that don't have any tag from this tag group
         let pictures_without_tag = pictures::table
@@ -161,12 +162,12 @@ impl TagGroup {
             .load::<i64>(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
 
-        Tag::add_pictures(conn, default_tag_id, pictures_without_tag)?;
+        PictureTag::add_pictures(conn, default_tag_id, &pictures_without_tag)?;
         Ok(())
     }
 
     /// Remove tags of this tag group from pictures
-    pub fn remove_pictures(&self, conn: &mut DBConn, picture_ids: Vec<i64>) -> Result<usize, ErrorResponder> {
+    pub fn remove_pictures(&self, conn: &mut DBConn, picture_ids: &Vec<i64>) -> Result<usize, ErrorResponder> {
         let tag_ids = Tag::list_tags(conn, self.id.unwrap())?.iter().map(|tag| tag.id).collect::<Vec<i32>>();
         diesel::delete(pictures_tags::table)
             .filter(pictures_tags::tag_id.eq_any(tag_ids))
