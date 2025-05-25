@@ -59,7 +59,8 @@ pub fn auth_confirm_code(
     let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res_no_rollback())?;
     let user = User::from_id(conn, &user_id)?;
 
-    let code_token = hex::decode(&data.code_token).map_err(|_| ErrorType::UnprocessableEntity.res_no_rollback())?;
+    let code_token = hex::decode(&data.code_token)
+        .map_err(|_| ErrorType::UnprocessableEntity("Code token should be a hex string".to_string()).res_no_rollback())?;
 
     err_transaction(conn, |conn| {
         let redirect_url =
@@ -82,7 +83,7 @@ pub fn auth_confirm_token(
     let user_id = user_auth_info.user_id.ok_or(ErrorType::UserNotFound.res_no_rollback())?;
     let user = User::from_id(conn, &user_id)?;
 
-    let token = hex::decode(&data.token).map_err(|_| ErrorType::UnprocessableEntity.res_no_rollback())?;
+    let token = hex::decode(&data.token).map_err(|_| ErrorType::UnprocessableEntity("token should be a hex string".to_string()).res_no_rollback())?;
 
     err_transaction(conn, |conn| {
         let redirect_url = Confirmation::check_token_and_mark_as_used(conn, &user_id, &data.action, &token, 15)?.unwrap_or(get_frontend_host());

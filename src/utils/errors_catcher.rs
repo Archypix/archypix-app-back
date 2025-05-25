@@ -109,7 +109,7 @@ pub enum ErrorType {
     BadRequest,
     Unauthorized,
     NotFound(String),
-    UnprocessableEntity,
+    UnprocessableEntity(String),
     InternalError(String),
     // Form validation (see UnprocessableEntity for type check related errors)
     InvalidInput(String),
@@ -171,9 +171,7 @@ impl ErrorType {
             ErrorType::BadRequest => ErrorResponder::BadRequest(Self::create_response("Bad request".to_string(), kind, rollback)),
             ErrorType::Unauthorized => ErrorResponder::Unauthorized(Self::create_response("Unauthorized".to_string(), kind, rollback)),
             ErrorType::NotFound(path) => ErrorResponder::NotFound(Self::create_response(format!("Not found: {}", path), kind, rollback)),
-            ErrorType::UnprocessableEntity => {
-                ErrorResponder::UnprocessableEntity(Self::create_response("Unprocessable entity".to_string(), kind, rollback))
-            }
+            ErrorType::UnprocessableEntity(msg) => ErrorResponder::UnprocessableEntity(Self::create_response(msg, kind, rollback)),
             ErrorType::InternalError(msg) => {
                 ErrorResponder::InternalError(Self::create_response(format!("Internal error: {}", msg).to_string(), kind, rollback))
             }
@@ -257,7 +255,7 @@ pub fn not_found(req: &Request) -> ErrorResponder {
 /// When a JSON value type is incorrect
 #[catch(422)]
 pub fn unprocessable_entity() -> ErrorResponder {
-    ErrorType::UnprocessableEntity.res_no_rollback()
+    ErrorType::UnprocessableEntity("Invalid JSON structure".to_string()).res_no_rollback()
 }
 #[catch(500)]
 pub fn internal_error() -> ErrorResponder {

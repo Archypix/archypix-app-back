@@ -46,13 +46,13 @@ pub async fn create_tag_group(data: Json<TagGroupWithTags>, db: &State<DBPool>, 
         if let Some(default_tag) = default_tags_count {
             default_tag_for_required_group = Some((*default_tag).clone());
         } else {
-            return ErrorType::UnprocessableEntity.res_err();
+            return ErrorType::UnprocessableEntity("Required tag group must have at least one default tag".to_string()).res_err();
         }
     }
     if !data.tag_group.multiple {
         let default_tags_count = data.tags.iter().filter(|tag| tag.is_default).count();
         if default_tags_count > 1 {
-            return ErrorType::UnprocessableEntity.res_err();
+            return ErrorType::UnprocessableEntity("Multiple tag group can't have more than one default tag".to_string()).res_err();
         }
     }
     // Insert the group and tags
@@ -91,21 +91,29 @@ pub async fn patch_tag_group(data: Json<PatchTagGroupRequest>, db: &State<DBPool
     }
     let old_tag_group_tags = Tag::list_tags(conn, old_tag_group.id.unwrap())?;
 
+    let unedited_tags: Vec<Tag> = old_tag_group_tags
+        .iter()
+        .filter(|tag| !data.edited_tags.iter().any(|edited_tag| edited_tag.id == tag.id) && !data.deleted_tags_ids.contains(&tag.id))
+        .cloned()
+        .collect();
+
     // Check requirements for the updated tag group:
     //  - If the group is required, there must be at least one default tag.
     //  - If the group is not multiple, there can't be more than one default tag.
     if data.edited_tag_group.required {
-        let default_tags_count =
-            data.edited_tags.iter().filter(|tag| tag.is_default).count() + data.new_tags.iter().filter(|tag| tag.is_default).count();
+        let default_tags_count = data.edited_tags.iter().filter(|tag| tag.is_default).count()
+            + data.new_tags.iter().filter(|tag| tag.is_default).count()
+            + unedited_tags.iter().filter(|tag| tag.is_default).count();
         if default_tags_count == 0 {
-            return ErrorType::UnprocessableEntity.res_err();
+            return ErrorType::UnprocessableEntity("Required tag group must have at least one default tag".to_string()).res_err();
         }
     }
     if !data.edited_tag_group.multiple {
-        let default_tags_count =
-            data.edited_tags.iter().filter(|tag| tag.is_default).count() + data.new_tags.iter().filter(|tag| tag.is_default).count();
+        let default_tags_count = data.edited_tags.iter().filter(|tag| tag.is_default).count()
+            + data.new_tags.iter().filter(|tag| tag.is_default).count()
+            + unedited_tags.iter().filter(|tag| tag.is_default).count();
         if default_tags_count > 1 {
-            return ErrorType::UnprocessableEntity.res_err();
+            return ErrorType::UnprocessableEntity("Multiple tag group can't have more than one default tag".to_string()).res_err();
         }
     }
 
@@ -268,7 +276,7 @@ pub struct EditPictureTagsRequest {
 pub async fn edit_picture_tags(db: &State<DBPool>, user: User, data: Json<EditPictureTagsRequest>) -> Result<Json<Vec<i32>>, ErrorResponder> {
     let mut conn: &mut DBConn = &mut db.get().unwrap();
     if data.picture_ids.len() == 0 {
-        return ErrorType::UnprocessableEntity.res_err();
+        return ErrorType::UnprocessableEntity("No picture ids on which to edit tags".to_string()).res_err();
     }
 
     // Grouping tags by tag group, checking at the same time that tags exists and belong to the user
@@ -349,7 +357,7 @@ pub async fn edit_picture_tags(db: &State<DBPool>, user: User, data: Json<EditPi
                 let default_tag = Tag::list_tags(conn, tgwt.tag_group.id.unwrap())?
                     .into_iter()
                     .find(|tag| tag.is_default)
-                    .ok_or_else(|| ErrorType::InternalError("Required tag group without any default tag".to_string()).res())?;
+                    .ok_or_else(|| ErrorType::InternalError("There is a required tag group without any default tag".to_string()).res())?;
                 // Add the default tag to the pictures
                 TagGroup::add_default_tag_to_pictures_without_tag_from_list(conn, default_tag.id, tgwt.tag_group.id.unwrap(), &data.picture_ids)?;
             }
