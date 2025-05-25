@@ -134,9 +134,8 @@ impl Picture {
     }
 
     /// Get a list of pictures based on the query. This function guaranties that the user has the right to access the requested pictures.
-    pub fn query(conn: &mut DBConn, user_id: i32, query: PicturesQuery) -> Result<Vec<ListPictureData>, ErrorResponder> {
+    pub fn query(conn: &mut DBConn, user_id: i32, query: PicturesQuery, page_size: i64) -> Result<Vec<ListPictureData>, ErrorResponder> {
         assert_ne!(query.page, 0, "Page number must be greater than 0");
-        let page_size: i64 = 100;
 
         // Initial request that returns all the pictures the user can see
         let mut dsl_query = pictures::table

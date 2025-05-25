@@ -129,7 +129,7 @@ dependencies = [
  "enum-kinds",
  "env_logger",
  "hex",
-    "ipnet",
+ "ipnet",
  "itertools 0.14.0",
  "lazy_static",
  "lettre",
@@ -1285,13 +1285,13 @@ dependencies = [
  "byteorder",
  "chrono",
  "diesel_derives",
-    "ipnet",
-    "itoa",
-    "libc",
+ "ipnet",
+ "itoa",
+ "libc",
  "num-bigint",
  "num-integer",
  "num-traits",
-    "pq-sys",
+ "pq-sys",
  "r2d2",
 ]
 
@@ -3067,8 +3067,8 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41c852911b98f5981956037b2ca976660612e548986c30af075e753107bc3400"
 dependencies = [
-    "libc",
-    "vcpkg",
+ "libc",
+ "vcpkg",
 ]
 
 [[package]]

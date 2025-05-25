@@ -216,7 +216,7 @@ pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Res
         page: 2,
     };
 
-    let pictures = Picture::query(conn, user.id, query)?;
+    let pictures = Picture::query(conn, user.id, query, 100)?;
     Ok(Json(pictures))
 }
 

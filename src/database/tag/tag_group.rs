@@ -5,10 +5,11 @@ use crate::database::tag::tag::Tag;
 use crate::database::user::user::User;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::dsl::{exists, not};
-use diesel::QueryDsl;
 use diesel::{Associations, Identifiable, Queryable, RunQueryDsl, Selectable};
 use diesel::{BoolExpressionMethods, JoinOnDsl};
+use diesel::{EqAll, QueryDsl};
 use diesel::{ExpressionMethods, OptionalExtension};
+use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -104,12 +105,12 @@ impl TagGroup {
     }
 
     /// Add a default tag to all pictures that don't have any tag from this tag group
-    pub fn add_default_tag_to_pictures_without_tag_from_user(
+    pub fn add_tags_to_pictures_without_tag_from_user(
         conn: &mut DBConn,
-        default_tag_id: i32,
+        tag_ids: &Vec<i32>,
         tag_group_id: i32,
         user_id: i32,
-    ) -> Result<(), ErrorResponder> {
+    ) -> Result<usize, ErrorResponder> {
         // Get all pictures accessible by the user that don't have any tag from this tag group
         let pictures_without_tag = pictures::table
             // Join with shared pictures
@@ -132,15 +133,7 @@ impl TagGroup {
             .load::<i64>(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
 
-        // Add the default tag to all these pictures
-        for picture_id in pictures_without_tag {
-            diesel::insert_into(pictures_tags::table)
-                .values((pictures_tags::picture_id.eq(picture_id), pictures_tags::tag_id.eq(default_tag_id)))
-                .execute(conn)
-                .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
-        }
-
-        Ok(())
+        PictureTag::add_pictures_batch(conn, &tag_ids, &pictures_without_tag)
     }
     /// Add a default tag to all pictures that don't have any tag from this tag group along a vec of pictures
     pub fn add_default_tag_to_pictures_without_tag_from_list(

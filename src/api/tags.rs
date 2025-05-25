@@ -1,9 +1,12 @@
+use crate::api::query_pictures::PicturesQuery;
 use crate::database::database::{DBConn, DBPool};
+use crate::database::picture::picture::Picture;
 use crate::database::picture::picture_tag::PictureTag;
 use crate::database::tag::tag::Tag;
 use crate::database::tag::tag_group::{TagGroup, TagGroupWithTags};
 use crate::database::user::user::User;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
+use itertools::Itertools;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::State;
@@ -35,47 +38,51 @@ pub async fn list_tags(db: &State<DBPool>, user: User) -> Result<Json<AllTagsRes
 #[openapi(tag = "Tags")]
 #[post("/tag_group", data = "<data>")]
 pub async fn create_tag_group(data: Json<TagGroupWithTags>, db: &State<DBPool>, user: User) -> Result<Json<TagGroupWithTags>, ErrorResponder> {
-    let conn: &mut DBConn = &mut db.get().unwrap();
+    let mut conn: &mut DBConn = &mut db.get().unwrap();
 
-    // Check requirements:
-    //  - If the group is required, there must be at least one default tag.
-    //  - If the group is not multiple, there can't be more than one default tag.
-    let mut default_tag_for_required_group = None;
-    if data.tag_group.required {
-        let default_tags_count = data.tags.iter().find(|tag| tag.is_default);
-        if let Some(default_tag) = default_tags_count {
-            default_tag_for_required_group = Some((*default_tag).clone());
-        } else {
+    err_transaction(&mut conn, |conn| {
+        // Insert the group and tags
+        let mut to_insert_tag_group = data.tag_group.clone();
+        to_insert_tag_group.user_id = user.id;
+        let inserted_tag_group = TagGroup::insert(conn, to_insert_tag_group)?;
+        let inserted_tag_group_id = inserted_tag_group.id.unwrap();
+        let mut inserted_tags = Vec::new();
+
+        for mut tag in data.into_inner().tags {
+            tag.tag_group_id = inserted_tag_group_id;
+            inserted_tags.push(Tag::insert(conn, tag)?);
+        }
+
+        let default_tag_ids = inserted_tags.iter().filter(|tag| tag.is_default).map(|tag| tag.id).collect_vec();
+
+        // Check requirements (on inserted_tags to have the correct ids):
+        //  - If the group is required, there must be at least one default tag.
+        //  - If the group is not multiple, there can't be more than one default tag.
+        if inserted_tag_group.required && default_tag_ids.len() == 0 {
             return ErrorType::UnprocessableEntity("Required tag group must have at least one default tag".to_string()).res_err();
         }
-    }
-    if !data.tag_group.multiple {
-        let default_tags_count = data.tags.iter().filter(|tag| tag.is_default).count();
-        if default_tags_count > 1 {
+        if !inserted_tag_group.multiple && default_tag_ids.len() > 1 {
             return ErrorType::UnprocessableEntity("Multiple tag group can't have more than one default tag".to_string()).res_err();
         }
-    }
-    // Insert the group and tags
-    let mut to_insert_tag_group = data.tag_group.clone();
-    to_insert_tag_group.user_id = user.id;
-    let inserted_tag_group = TagGroup::insert(conn, to_insert_tag_group)?;
-    let inserted_tag_group_id = inserted_tag_group.id.unwrap();
-    let mut inserted_tags = Vec::new();
 
-    for mut tag in data.into_inner().tags {
-        tag.tag_group_id = inserted_tag_group_id;
-        inserted_tags.push(Tag::insert(conn, tag)?);
-    }
+        // Add all default tags to all pictures
+        let mut query = PicturesQuery::from_page(1);
+        let mut pictures = Picture::query(conn, user.id, query.clone(), 1000)?;
+        while pictures.len() > 0 {
+            let ids = pictures.into_iter().map(|picture| picture.id).collect_vec();
+            PictureTag::add_pictures_batch(conn, &default_tag_ids, &ids)?;
+            query.page += 1;
+            if ids.len() < 1000 {
+                break;
+            }
+            pictures = Picture::query(conn, user.id, query.clone(), 1000)?;
+        }
 
-    // If the group is required, add the first default tag to all pictures that don't have any tag from this tag group
-    if let Some(default_tag) = default_tag_for_required_group {
-        TagGroup::add_default_tag_to_pictures_without_tag_from_user(conn, default_tag.id, inserted_tag_group_id, user.id)?;
-    }
-
-    Ok(Json(TagGroupWithTags {
-        tag_group: inserted_tag_group,
-        tags: inserted_tags,
-    }))
+        Ok(Json(TagGroupWithTags {
+            tag_group: inserted_tag_group,
+            tags: inserted_tags,
+        }))
+    })
 }
 
 /// Patch a tag group and its tags (create, edit, delete)
@@ -96,26 +103,6 @@ pub async fn patch_tag_group(data: Json<PatchTagGroupRequest>, db: &State<DBPool
         .filter(|tag| !data.edited_tags.iter().any(|edited_tag| edited_tag.id == tag.id) && !data.deleted_tags_ids.contains(&tag.id))
         .cloned()
         .collect();
-
-    // Check requirements for the updated tag group:
-    //  - If the group is required, there must be at least one default tag.
-    //  - If the group is not multiple, there can't be more than one default tag.
-    if data.edited_tag_group.required {
-        let default_tags_count = data.edited_tags.iter().filter(|tag| tag.is_default).count()
-            + data.new_tags.iter().filter(|tag| tag.is_default).count()
-            + unedited_tags.iter().filter(|tag| tag.is_default).count();
-        if default_tags_count == 0 {
-            return ErrorType::UnprocessableEntity("Required tag group must have at least one default tag".to_string()).res_err();
-        }
-    }
-    if !data.edited_tag_group.multiple {
-        let default_tags_count = data.edited_tags.iter().filter(|tag| tag.is_default).count()
-            + data.new_tags.iter().filter(|tag| tag.is_default).count()
-            + unedited_tags.iter().filter(|tag| tag.is_default).count();
-        if default_tags_count > 1 {
-            return ErrorType::UnprocessableEntity("Multiple tag group can't have more than one default tag".to_string()).res_err();
-        }
-    }
 
     err_transaction(&mut conn, |conn| {
         // 1. Edit the tag group
@@ -144,26 +131,36 @@ pub async fn patch_tag_group(data: Json<PatchTagGroupRequest>, db: &State<DBPool
             updated_or_new_tags.push(Tag::insert(conn, tag)?);
         }
 
-        // 5. If the group is required, add the first default tag to all pictures that don't have any tag from this tag group
-        if updated_tag_group.required {
-            if let Some(default_tag) = updated_or_new_tags.iter().find(|tag| tag.is_default) {
-                TagGroup::add_default_tag_to_pictures_without_tag_from_user(conn, default_tag.id, updated_tag_group.id.unwrap(), user.id)?;
-            }
+        // 5. Check requirements for the updated tag group:
+        //  - If the group is required, there must be at least one default tag.
+        //  - If the group is not multiple, there can't be more than one default tag.
+        let default_tag_ids = updated_or_new_tags
+            .iter()
+            .chain(unedited_tags.iter())
+            .filter(|tag| tag.is_default)
+            .map(|tag| tag.id)
+            .collect_vec();
+        if data.edited_tag_group.required && default_tag_ids.len() == 0 {
+            return ErrorType::UnprocessableEntity("Required tag group must have at least one default tag".to_string()).res_err();
+        }
+        if !data.edited_tag_group.multiple && default_tag_ids.len() > 1 {
+            return ErrorType::UnprocessableEntity("Multiple tag group can't have more than one default tag".to_string()).res_err();
         }
 
-        // 6. Gather all Tags: all old tags that are not deleted or edited, and all updated/new tags
-        let mut new_tag_group_tags = old_tag_group_tags
-            .into_iter()
-            .filter(|tag| !data.deleted_tags_ids.contains(&tag.id) && !data.edited_tags.iter().any(|edited_tag| edited_tag.id == tag.id))
-            .collect::<Vec<Tag>>();
-        new_tag_group_tags.append(&mut updated_or_new_tags);
+        // 6. If the group is required, add all the default tag to all pictures that don't have any tag from this tag group
+        if updated_tag_group.required {
+            TagGroup::add_tags_to_pictures_without_tag_from_user(conn, &default_tag_ids, updated_tag_group.id.unwrap(), user.id)?;
+        }
+
+        // 7. Gather all Tags: all old tags that are not deleted or edited, and all updated/new tags
+        let mut all_tags = updated_or_new_tags.iter().chain(unedited_tags.iter()).cloned().collect::<Vec<Tag>>();
 
         // 7. Update arrangements strategies if needed
         // TODO: update arrangements that depends on this tag group.
 
         Ok(Json(TagGroupWithTags {
             tag_group: updated_tag_group,
-            tags: new_tag_group_tags,
+            tags: all_tags,
         }))
     })
 }

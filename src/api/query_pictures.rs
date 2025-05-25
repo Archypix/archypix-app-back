@@ -21,6 +21,15 @@ pub struct PicturesQuery {
     pub sorts: Vec<PictureSort>,
     pub page: i32,
 }
+impl PicturesQuery {
+    pub fn from_page(page: i32) -> Self {
+        PicturesQuery {
+            filters: vec![],
+            sorts: vec![],
+            page,
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 pub enum PictureFilter {
@@ -44,6 +53,6 @@ pub enum PictureSort {
 #[post("/query_pictures", data = "<query>")]
 pub async fn query_pictures(db: &State<DBPool>, user: User, query: Json<PicturesQuery>) -> Result<Json<Vec<ListPictureData>>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
-    let pictures = Picture::query(conn, user.id, query.into_inner())?;
+    let pictures = Picture::query(conn, user.id, query.into_inner(), 100)?;
     Ok(Json(pictures))
 }
