@@ -3,6 +3,7 @@ use crate::database::group::arrangement::Arrangement;
 use crate::database::group::group::Group;
 use crate::database::user::user::User;
 use crate::grouping::arrangement_strategy::ArrangementStrategy;
+use crate::grouping::grouping_process::{group_clear_pictures, group_pictures};
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
@@ -13,7 +14,7 @@ use rocket_okapi::{openapi, JsonSchema};
 pub struct ArrangementRequest {
     strong_match_conversion: bool,
     name: String,
-    strategy: ArrangementStrategy,
+    strategy: Option<ArrangementStrategy>,
 }
 #[derive(Serialize, JsonSchema)]
 pub struct ArrangementResponse {
@@ -58,11 +59,21 @@ pub async fn edit_arrangement(
     let arrangement = Arrangement::from_id_and_user_id(conn, arrangement_id, user.id)?;
 
     err_transaction(&mut conn, |conn| {
-        // TODO: Uddate the arrangement in the database
+        // 1. Update the arrangement in the database
+        Arrangement::update(conn, arrangement.id, &request.name, request.strong_match_conversion, &request.strategy)?;
 
-        // TODO: Check all pictures against this edited arrangement and update groups
+        // 2. TODO: If strategy grouping has changed, we need to edit:
+        //  - groups of the arrangement
+        //  - hierarchies
+        //  - arrangements depending on this one
+        //  - shared group instances and link shared group instances
 
-        // TODO: Update arrangements that depends on this one
+        // 3. Check all pictures against this edited arrangement
+        if arrangement.strategy.is_some() {
+            // Arrangement is/was not manual
+            // For now we treat that like if pictures has all changed with full dependency type, but only for this arrangement.
+            group_pictures(conn, user.id, None, Some(arrangement.id), None, true)?;
+        }
 
         Ok(Json(ArrangementResponse { arrangement, groups: vec![] }))
     })
@@ -78,9 +89,24 @@ pub async fn delete_arrangement(db: &State<DBPool>, user: User, arrangement_id: 
     err_transaction(&mut conn, |conn| {
         // TODO: Delete the arrangement in the database
 
-        // TODO: Delete all groups and pictures associated with this arrangement
+        // 1. Remove pictures from all groups of this arrangement (should be done carefully to remove the pictures from other users if needed)
+        let group_ids = if let Some(strategy) = arrangement.get_strategy()? {
+            strategy.groupings.get_groups()
+        } else {
+            Group::from_arrangement(conn, arrangement.id)?.into_iter().map(|g| g.id).collect()
+        };
+        group_ids.iter().try_for_each(|group_id| group_clear_pictures(conn, *group_id))?;
 
-        // TODO: Edit strategies of the arrangements that depend on this one
+        // 2. It is now safe to delete shared groups instances
+
+        // 3. Delete link shared groups
+
+        // 4. Edit hierarchies that depend on this arrangement
+
+        // 5. Edit arrangements that depend on this arrangement
+
+        // 6. Delete the arrangement itself
+        Arrangement::delete(conn, arrangement.id)?;
         Ok(())
     })
 }

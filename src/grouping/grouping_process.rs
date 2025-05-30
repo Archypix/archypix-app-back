@@ -11,8 +11,7 @@ use crate::grouping::topological_sorts::{topological_sort, topological_sort_filt
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use itertools::Itertools;
 use rocket::yansi::Paint;
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::hash::Hash;
+use std::collections::{HashMap, HashSet};
 // Process:
 // - Create arrangement:
 //   Group only on this arrangement as no other arrangement can reference it.
@@ -41,6 +40,11 @@ use std::hash::Hash;
 // | Edit   arrangement | All      | Edited + Dependants
 // | Add/Edit  pictures | Edited   | All
 
+/// Group pictures into arrangements’ groups.
+/// If `do_ungroup` is true, pictures that do not match the arrangement filter will be ungrouped, but `picture_ids_filter` must be provided.
+/// If `arrangement_id_filter` is provided, only pictures from this arrangement will be grouped.
+/// If `dependency_type_filter` is provided, only pictures from arrangements of this dependency type will be grouped.
+/// `arrangement_id_filter` and `dependency_type_filter` cannot be used at the same time.
 pub fn group_pictures(
     conn: &mut DBConn,
     user_id: i32,
@@ -56,7 +60,8 @@ pub fn group_pictures(
         return Err(ErrorType::InvalidInput("Cannot filter by arrangement id and dependency type at the same time".to_string()).res());
     }
     if do_ungroup && picture_ids_filter.is_none() {
-        return Err(ErrorType::InvalidInput("Cannot ungroup without a list of picture ids".to_string()).res());
+        // TODO: No optimization developed for wen editing arrangements. Editing arrangements works like if all pictures were edited for now.
+        //return Err(ErrorType::InvalidInput("Cannot ungroup without a list of picture ids".to_string()).res());
     }
 
     // Filter arrangements if needed
@@ -107,7 +112,7 @@ pub fn group_pictures(
 
         if update_strategy {
             let strategy = arrangement.strategy.clone();
-            arrangement.arrangement.set_strategy(conn, strategy)?;
+            arrangement.arrangement.set_strategy(conn, Some(strategy))?;
         }
     }
 
@@ -195,12 +200,23 @@ pub fn group_remove_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec
     if picture_ids.len() == 0 {
         return Ok(());
     }
-
     let removed_pictures = Group::remove_pictures(conn, group_id, &picture_ids)?;
     if removed_pictures.len() == 0 {
         return Ok(());
     }
+    group_manage_removed_pictures(conn, group_id, removed_pictures)
+}
 
+/// Remove all the pictures of the group, and remove them from all groups of users who lost access to them.
+pub fn group_clear_pictures(conn: &mut DBConn, group_id: i32) -> Result<(), ErrorResponder> {
+    let removed_pictures = Group::clear_and_get_pictures(conn, group_id)?;
+    if removed_pictures.len() == 0 {
+        return Ok(());
+    }
+    group_manage_removed_pictures(conn, group_id, removed_pictures)
+}
+
+fn group_manage_removed_pictures(conn: &mut DBConn, group_id: i32, removed_pictures: Vec<i64>) -> Result<(), ErrorResponder> {
     let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
     for shared_group in shared_groups.iter() {
         let unaccessible_pictures = Picture::filter_user_accessible_pictures(conn, shared_group.user_id, &removed_pictures)?;

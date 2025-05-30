@@ -2,7 +2,6 @@ services:
   archypix-app-postgres:
     image: postgres:17
     container_name: archypix-app-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: archypix
       POSTGRES_DB: archypix
@@ -29,7 +28,6 @@ services:
     build: .
     image: archypix-app-back
     container_name: archypix-app-back
-    restart: unless-stopped
     depends_on:
       - archypix-app-postgres
       - archypix-app-minio

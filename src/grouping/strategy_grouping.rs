@@ -44,6 +44,9 @@ impl UngroupRecord {
         UngroupRecord { enable, map: HashMap::new() }
     }
     pub fn add(&mut self, group_id: i32, picture_ids: HashSet<i64>) {
+        if !self.enable {
+            return;
+        }
         if self.map.contains_key(&group_id) {
             self.map.get_mut(&group_id).unwrap().extend(picture_ids);
         } else {

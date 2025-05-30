@@ -30,29 +30,46 @@ impl Arrangement {
         user_id: i32,
         name: String,
         strong_match_conversion: bool,
-        strategy: ArrangementStrategy,
+        strategy: Option<ArrangementStrategy>,
     ) -> Result<Arrangement, ErrorResponder> {
         let strategy_bytes = serde_json::to_vec(&strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res_no_rollback())?;
-
-        let mut arrangement = Arrangement {
-            id: 0,
-            user_id,
-            name,
-            strong_match_conversion,
-            strategy: Some(strategy_bytes),
-            groups_dependant: strategy.is_groups_dependant(),
-            tags_dependant: strategy.is_tags_dependant(),
-            exif_dependant: strategy.is_exif_dependant(),
-        };
+        let dependency_type = ArrangementDependencyType::from(&strategy);
 
         diesel::insert_into(arrangements::table)
             .values((
-                arrangements::name.eq(&arrangement.name),
-                arrangements::strategy.eq(&arrangement.strategy),
-                arrangements::strong_match_conversion.eq(&arrangement.strong_match_conversion),
+                arrangements::user_id.eq(user_id),
+                arrangements::name.eq(&name),
+                arrangements::strategy.eq(Some(strategy_bytes)),
+                arrangements::strong_match_conversion.eq(strong_match_conversion),
+                arrangements::groups_dependant.eq(dependency_type.groups_dependant),
+                arrangements::tags_dependant.eq(dependency_type.tags_dependant),
+                arrangements::exif_dependant.eq(dependency_type.exif_dependant),
             ))
             .get_result(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+
+    pub fn update(
+        conn: &mut DBConn,
+        id: i32,
+        name: &String,
+        strong_match_conversion: bool,
+        strategy: &Option<ArrangementStrategy>,
+    ) -> Result<(), ErrorResponder> {
+        let dependency_type = ArrangementDependencyType::from(strategy);
+
+        diesel::update(arrangements::table.filter(arrangements::id.eq(id)))
+            .set((
+                arrangements::name.eq(name),
+                arrangements::strategy.eq(Self::strategy_to_binary(strategy)?),
+                arrangements::strong_match_conversion.eq(&strong_match_conversion),
+                arrangements::groups_dependant.eq(dependency_type.groups_dependant),
+                arrangements::tags_dependant.eq(dependency_type.tags_dependant),
+                arrangements::exif_dependant.eq(dependency_type.exif_dependant),
+            ))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+        Ok(())
     }
 
     pub fn from_user_id(conn: &mut DBConn, user_id: i32) -> Result<Vec<Arrangement>, ErrorResponder> {
@@ -82,14 +99,22 @@ impl Arrangement {
         Ok(None)
     }
     /// Updates the strategy of this arrangement
-    pub fn set_strategy(&mut self, conn: &mut DBConn, strategy: ArrangementStrategy) -> Result<(), ErrorResponder> {
-        self.strategy = Some(serde_json::to_vec(&strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?);
+    pub fn set_strategy(&mut self, conn: &mut DBConn, strategy: Option<ArrangementStrategy>) -> Result<(), ErrorResponder> {
+        self.strategy = Self::strategy_to_binary(&strategy)?;
 
         diesel::update(arrangements::table.filter(arrangements::id.eq(self.id)))
             .set(arrangements::strategy.eq(&self.strategy))
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
         Ok(())
+    }
+    pub fn strategy_to_binary(strategy: &Option<ArrangementStrategy>) -> Result<Option<Vec<u8>>, ErrorResponder> {
+        if let Some(strategy) = strategy {
+            return Ok(Some(
+                serde_json::to_vec(strategy).map_err(|e| ErrorType::InternalError(e.to_string()).res())?,
+            ));
+        }
+        Ok(None)
     }
 
     /// List all user’s arrangements
@@ -134,6 +159,14 @@ impl Arrangement {
             .select(arrangements::all_columns)
             .load::<Arrangement>(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?)
+    }
+
+    /// Delete the arrangement with the given id, without taking care of the dependencies (hierarchies, shared groups, strategies...)
+    pub fn delete(conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
+        diesel::delete(arrangements::table.filter(arrangements::id.eq(arrangement_id)))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+        Ok(())
     }
 }
 #[derive(Clone, Debug)]
@@ -191,6 +224,13 @@ impl ArrangementDependencyType {
             exif_dependant: true,
         }
     }
+    pub fn new_none() -> Self {
+        Self {
+            groups_dependant: false,
+            tags_dependant: false,
+            exif_dependant: false,
+        }
+    }
     /// Returns true if at least one of the dependencies of this type matches one of the provided.
     pub fn match_any(&self, other: &Self) -> bool {
         (self.groups_dependant && other.groups_dependant)
@@ -199,6 +239,19 @@ impl ArrangementDependencyType {
     }
 }
 
+impl From<&Option<ArrangementStrategy>> for ArrangementDependencyType {
+    fn from(strategy: &Option<ArrangementStrategy>) -> Self {
+        if let Some(strategy) = strategy {
+            ArrangementDependencyType {
+                groups_dependant: strategy.is_groups_dependant(),
+                tags_dependant: strategy.is_tags_dependant(),
+                exif_dependant: strategy.is_exif_dependant(),
+            }
+        } else {
+            Self::new_none()
+        }
+    }
+}
 impl From<&Arrangement> for ArrangementDependencyType {
     fn from(a: &Arrangement) -> Self {
         ArrangementDependencyType {

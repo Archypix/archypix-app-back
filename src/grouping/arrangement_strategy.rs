@@ -1,5 +1,5 @@
 use crate::database::database::DBConn;
-use crate::database::group::arrangement::Arrangement;
+use crate::database::group::arrangement::{Arrangement, ArrangementDependencyType};
 use crate::database::picture::picture::Picture;
 use crate::database::schema::PictureOrientation;
 use crate::grouping::strategy_filtering::StrategyFiltering;
@@ -37,6 +37,14 @@ impl ArrangementStrategy {
     }
     pub fn is_exif_dependant(&self) -> bool {
         self.filter.is_exif_dependant() || self.groupings.is_exif_dependant()
+    }
+
+    pub fn get_dependency_type(&self) -> ArrangementDependencyType {
+        ArrangementDependencyType {
+            groups_dependant: self.is_groups_dependant(),
+            tags_dependant: self.is_tags_dependant(),
+            exif_dependant: self.is_exif_dependant(),
+        }
     }
 }
 

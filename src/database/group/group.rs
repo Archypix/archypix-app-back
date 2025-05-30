@@ -38,6 +38,12 @@ impl Group {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
+    pub fn from_arrangement(conn: &mut DBConn, arrangement_id: i32) -> Result<Vec<Group>, ErrorResponder> {
+        groups::table
+            .filter(groups::arrangement_id.eq(arrangement_id))
+            .get_results(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
     pub fn from_id_and_arrangement(conn: &mut DBConn, group_id: i32, arrangement_id: i32) -> Result<Group, ErrorResponder> {
         groups::table
             .filter(groups::id.eq(group_id))
@@ -77,6 +83,13 @@ impl Group {
         diesel::delete(groups_pictures::table)
             .filter(groups_pictures::group_id.eq(group_id))
             .filter(groups_pictures::picture_id.eq_any(picture_ids))
+            .returning(groups_pictures::picture_id)
+            .get_results(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn clear_and_get_pictures(conn: &mut DBConn, group_id: i32) -> Result<Vec<i64>, ErrorResponder> {
+        diesel::delete(groups_pictures::table)
+            .filter(groups_pictures::group_id.eq(group_id))
             .returning(groups_pictures::picture_id)
             .get_results(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())

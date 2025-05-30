@@ -53,10 +53,10 @@ pub fn create_arrangement_with_dependant_groups(id: i32, groups: Vec<i32>, depen
             exif_dependant: false,
         },
         strategy: ArrangementStrategy {
-            filter: FilterType::IncludeGroups(groups).to_strategy(),
+            filter: FilterType::IncludeGroups(groups.clone()).to_strategy(),
             groupings: StrategyGrouping::GroupByTags(TagGrouping {
                 tag_group_id: 0,
-                tag_id_to_group_id: HashMap::new(),
+                tag_id_to_group_id: groups.iter().map(|id| (*id, *id)).collect(),
                 other_group_id: None,
                 group_names_format: "".to_string(),
             }),
