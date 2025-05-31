@@ -140,6 +140,7 @@ CREATE TABLE "groups"
     "arrangement_id"         INT4        NOT NULL,
     "share_match_conversion" BOOL        NOT NULL,
     "name"                   VARCHAR(32) NOT NULL,
+    "to_be_deleted" BOOL NOT NULL DEFAULT FALSE,
     FOREIGN KEY ("arrangement_id") REFERENCES "arrangements" ("id")
 );
 

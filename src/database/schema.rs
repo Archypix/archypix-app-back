@@ -202,6 +202,7 @@ table! {
         arrangement_id -> Int4,
         share_match_conversion -> Bool,
         name -> Varchar,
+        to_be_deleted -> Bool,
     }
 }
 joinable!(groups -> arrangements (arrangement_id));

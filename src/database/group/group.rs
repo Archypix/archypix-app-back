@@ -8,7 +8,7 @@ use diesel::{Associations, Identifiable, Queryable, Selectable};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq, Deserialize, Serialize, JsonSchema)]
+#[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq, Clone, Deserialize, Serialize, JsonSchema)]
 #[diesel(primary_key(id))]
 #[diesel(belongs_to(Arrangement))]
 #[diesel(table_name = groups)]
@@ -17,6 +17,7 @@ pub struct Group {
     pub arrangement_id: i32,
     pub share_match_conversion: bool,
     pub name: String,
+    pub to_be_deleted: bool,
 }
 
 impl Group {
@@ -38,7 +39,8 @@ impl Group {
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
-    pub fn from_arrangement(conn: &mut DBConn, arrangement_id: i32) -> Result<Vec<Group>, ErrorResponder> {
+    /// Retrieves all groups for a given arrangement, including those marked for deletion.
+    pub fn from_arrangement_all(conn: &mut DBConn, arrangement_id: i32) -> Result<Vec<Group>, ErrorResponder> {
         groups::table
             .filter(groups::arrangement_id.eq(arrangement_id))
             .get_results(conn)
@@ -58,10 +60,6 @@ impl Group {
             .select(Group::as_select())
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
-    }
-
-    pub fn arrangement_id(&self) -> i32 {
-        self.arrangement_id
     }
 
     // Adds a picture to the group and returns the vec of added picture ids (the ones that were not already in the group)
@@ -93,5 +91,19 @@ impl Group {
             .returning(groups_pictures::picture_id)
             .get_results(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn delete_by_arrangement_id(conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
+        diesel::delete(groups::table.filter(groups::arrangement_id.eq(arrangement_id)))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+        Ok(())
+    }
+    /// Marks all groups for a given arrangement as to be deleted.
+    pub fn mark_all_as_to_be_deleted(conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
+        diesel::update(groups::table.filter(groups::arrangement_id.eq(arrangement_id)))
+            .set(groups::to_be_deleted.eq(true))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+        Ok(())
     }
 }

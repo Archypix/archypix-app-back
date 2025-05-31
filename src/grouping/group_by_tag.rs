@@ -13,6 +13,11 @@ use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TagGroupingRequest {
+    pub tag_group_id: i32,
+    pub group_names_format: String,
+}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TagGrouping {
     pub tag_group_id: i32,
     pub tag_id_to_group_id: HashMap<i32, i32>,
@@ -43,6 +48,8 @@ impl TagGrouping {
     }
 }
 impl StrategyGroupingTrait for TagGrouping {
+    type Request = TagGroupingRequest;
+
     fn get_groups(&self) -> Vec<i32> {
         let mut groups: Vec<i32> = self.tag_id_to_group_id.values().cloned().collect();
         if let Some(id) = self.other_group_id {
@@ -95,5 +102,17 @@ impl StrategyGroupingTrait for TagGrouping {
             ungroup_record.add(self.other_group_id.unwrap(), ungroup_pictures);
         }
         Ok(update_strategy)
+    }
+
+    fn create(conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<Box<Self>, ErrorResponder> {
+        todo!()
+    }
+
+    fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder> {
+        todo!()
+    }
+
+    fn delete(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
+        todo!()
     }
 }

@@ -1,16 +1,13 @@
+use crate::api::groups::arrangement;
 use crate::database::database::DBConn;
-use crate::database::group::arrangement::ArrangementDetails;
-use crate::database::group::group::Group;
-use crate::database::tag::tag::Tag;
-use crate::grouping::arrangement_strategy::ExifDataTypeValue;
+use crate::database::group::arrangement::{Arrangement, ArrangementDetails};
 use crate::grouping::group_by_exif_interval::ExifIntervalGrouping;
 use crate::grouping::group_by_exif_value::ExifValuesGrouping;
-use crate::grouping::group_by_filter::FilterGrouping;
+use crate::grouping::group_by_filter::{FilterGrouping, FilterGroupingRequest};
 use crate::grouping::group_by_location::LocationGrouping;
-use crate::grouping::group_by_tag::TagGrouping;
-use crate::grouping::strategy_filtering::StrategyFiltering;
+use crate::grouping::group_by_tag::{TagGrouping, TagGroupingRequest};
 use crate::utils::errors_catcher::ErrorResponder;
-use itertools::Itertools;
+use enum_kinds::EnumKind;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
@@ -19,6 +16,8 @@ use std::collections::{HashMap, HashSet};
 /// - Give a list of pictures to group and group them
 /// - Detect any picture that is in a group and should not be in it
 pub trait StrategyGroupingTrait {
+    type Request: Serialize + Deserialize<'static> + JsonSchema;
+
     /// Returns the list of existing groups ids from strategy. In most cases, it should match the list of groups in the database.
     fn get_groups(&self) -> Vec<i32>;
 
@@ -32,6 +31,13 @@ pub trait StrategyGroupingTrait {
         ungroup_record: &mut UngroupRecord,
         picture_ids: &HashSet<i64>,
     ) -> Result<bool, ErrorResponder>;
+
+    /// Create a new strategy grouping from the request, creating the required groups if needed.
+    fn create(conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<Box<Self>, ErrorResponder>;
+    /// Edit the strategy grouping, marking groups of the old strategy that can’t match any group of the new strategy as "to be deleted".
+    fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder>;
+    /// Mark all groups as "to be deleted" in the database, allowing the strategy to be deleted (and replaced by another one).
+    fn delete(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder>;
 }
 
 /// Stores all pictures to ungroup, allowing to ungroup them only at the end.
@@ -55,7 +61,8 @@ impl UngroupRecord {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(EnumKind, Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[enum_kind(StrategyGroupingKind, derive(Serialize, Deserialize, JsonSchema))]
 pub enum StrategyGrouping {
     GroupByFilter(FilterGrouping),
     GroupByTags(TagGrouping),
@@ -104,6 +111,60 @@ impl StrategyGrouping {
             StrategyGrouping::GroupByFilter(f) => f.is_exif_dependant(),
             StrategyGrouping::GroupByExifValues(_) | StrategyGrouping::GroupByExifInterval(_) | StrategyGrouping::GroupByLocation(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn delete(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
+        match self {
+            StrategyGrouping::GroupByFilter(f) => f.delete(conn, arrangement_id),
+            StrategyGrouping::GroupByTags(t) => t.delete(conn, arrangement_id),
+            StrategyGrouping::GroupByExifValues(_) | StrategyGrouping::GroupByExifInterval(_) | StrategyGrouping::GroupByLocation(_) => todo!(),
+        }
+    }
+}
+
+#[derive(EnumKind, Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[enum_kind(StrategyGroupingRequestKind, derive(Serialize, Deserialize, JsonSchema))]
+pub enum StrategyGroupingRequest {
+    GroupByFilter(FilterGroupingRequest),
+    GroupByTags(TagGroupingRequest),
+}
+
+impl StrategyGroupingRequest {
+    pub fn create_strategy_grouping(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<StrategyGrouping, ErrorResponder> {
+        match self {
+            StrategyGroupingRequest::GroupByFilter(request) => {
+                let grouping = FilterGrouping::create(conn, arrangement_id, request)?;
+                Ok(StrategyGrouping::GroupByFilter(*grouping))
+            }
+            StrategyGroupingRequest::GroupByTags(request) => {
+                let grouping = TagGrouping::create(conn, arrangement_id, request)?;
+                Ok(StrategyGrouping::GroupByTags(*grouping))
+            }
+        }
+    }
+    pub fn edit_strategy_grouping(
+        &self,
+        conn: &mut DBConn,
+        arrangement_id: i32,
+        old_grouping: &StrategyGrouping,
+    ) -> Result<StrategyGrouping, ErrorResponder> {
+        match (self, old_grouping) {
+            (StrategyGroupingRequest::GroupByFilter(req), StrategyGrouping::GroupByFilter(old)) => {
+                let mut new = old.clone();
+                new.edit(conn, arrangement_id, req)?;
+                Ok(StrategyGrouping::GroupByFilter(new))
+            }
+            (StrategyGroupingRequest::GroupByTags(req), StrategyGrouping::GroupByTags(old)) => {
+                let mut new = old.clone();
+                new.edit(conn, arrangement_id, req)?;
+                Ok(StrategyGrouping::GroupByTags(new))
+            }
+            _ => {
+                // Different types - delete old and create new
+                old_grouping.delete(conn, arrangement_id)?;
+                self.create_strategy_grouping(conn, arrangement_id)
+            }
         }
     }
 }

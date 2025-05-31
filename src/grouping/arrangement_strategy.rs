@@ -1,15 +1,13 @@
 use crate::database::database::DBConn;
 use crate::database::group::arrangement::{Arrangement, ArrangementDependencyType};
-use crate::database::picture::picture::Picture;
 use crate::database::schema::PictureOrientation;
 use crate::grouping::strategy_filtering::StrategyFiltering;
-use crate::grouping::strategy_grouping::StrategyGrouping;
+use crate::grouping::strategy_grouping::{StrategyGrouping, StrategyGroupingRequest};
 use crate::utils::errors_catcher::ErrorResponder;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ArrangementStrategy {
@@ -66,4 +64,32 @@ pub enum ExifDataTypeValue {
     ExposureTime(Vec<(i32, i32)>),
     IsoSpeed(Vec<i32>),
     FNumber(Vec<BigDecimal>),
+}
+
+// Requests
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ArrangementStrategyRequest {
+    pub filter: StrategyFiltering,
+    pub groupings: StrategyGroupingRequest,
+    pub preserve_unicity: bool,
+}
+
+impl ArrangementStrategyRequest {
+    pub fn create(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<ArrangementStrategy, ErrorResponder> {
+        let groupings = self.groupings.create_strategy_grouping(conn, arrangement_id)?;
+        Ok(ArrangementStrategy {
+            filter: self.filter.clone(),
+            groupings,
+            preserve_unicity: self.preserve_unicity,
+        })
+    }
+    pub fn edit(&self, conn: &mut DBConn, arrangement_id: i32, old_strategy: &ArrangementStrategy) -> Result<ArrangementStrategy, ErrorResponder> {
+        let groupings = self.groupings.edit_strategy_grouping(conn, arrangement_id, &old_strategy.groupings)?;
+        Ok(ArrangementStrategy {
+            filter: self.filter.clone(),
+            groupings,
+            preserve_unicity: self.preserve_unicity,
+        })
+    }
 }

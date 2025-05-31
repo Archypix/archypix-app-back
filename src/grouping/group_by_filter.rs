@@ -12,6 +12,11 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FilterGroupingRequest {
+    pub filters: HashMap<String, StrategyFiltering>, // Key is the group name, value is the filter
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FilterGrouping {
     pub filters: HashMap<i32, StrategyFiltering>, // Key is the group id, value is the filter
     pub other_group_id: Option<i32>,              // Id of the group for the pictures that do not match any filter
@@ -37,6 +42,8 @@ impl FilterGrouping {
     }
 }
 impl StrategyGroupingTrait for FilterGrouping {
+    type Request = FilterGroupingRequest;
+
     fn get_groups(&self) -> Vec<i32> {
         let mut groups: Vec<i32> = self.filters.keys().cloned().collect();
         if let Some(id) = self.other_group_id {
@@ -83,5 +90,17 @@ impl StrategyGroupingTrait for FilterGrouping {
             ungroup_record.add(self.other_group_id.unwrap(), ungroup_pictures);
         }
         Ok(update_strategy)
+    }
+
+    fn create(conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<Box<Self>, ErrorResponder> {
+        todo!()
+    }
+
+    fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder> {
+        todo!()
+    }
+
+    fn delete(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
+        todo!()
     }
 }

@@ -28,4 +28,11 @@ impl SharedGroup {
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
+
+    pub fn delete_by_group_ids(conn: &mut DBConn, group_ids: &Vec<i32>) -> Result<(), ErrorResponder> {
+        diesel::delete(shared_groups::table.filter(shared_groups::group_id.eq_any(group_ids)))
+            .execute(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
+        Ok(())
+    }
 }
