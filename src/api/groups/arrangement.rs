@@ -9,6 +9,7 @@ use crate::grouping::arrangement_strategy::{ArrangementStrategy, ArrangementStra
 use crate::grouping::grouping_process::{group_clear_pictures, group_pictures};
 use crate::grouping::strategy_grouping::StrategyGroupingRequest;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
+use diesel_derives::{Associations, Identifiable, Queryable, Selectable};
 use itertools::Itertools;
 use rocket::form::validate::Contains;
 use rocket::form::Shareable;
@@ -25,17 +26,50 @@ pub struct ArrangementRequest {
 }
 #[derive(Serialize, JsonSchema)]
 pub struct ArrangementResponse {
-    arrangement: Arrangement,
+    arrangement: ArrangementResponseArrangement,
     groups: Vec<Group>,
     to_be_deleted_groups: Vec<Group>,
+}
+
+#[derive(Debug, PartialEq, Clone, JsonSchema, Serialize)]
+pub struct ArrangementResponseArrangement {
+    pub id: i32,
+    pub user_id: i32,
+    pub name: String,
+    pub strong_match_conversion: bool,
+    pub strategy: Option<ArrangementStrategy>,
+}
+impl TryFrom<Arrangement> for ArrangementResponseArrangement {
+    type Error = ErrorResponder;
+    fn try_from(arrangement: Arrangement) -> Result<Self, Self::Error> {
+        Ok(ArrangementResponseArrangement {
+            id: arrangement.id,
+            user_id: arrangement.user_id,
+            strategy: arrangement.get_strategy()?,
+            name: arrangement.name,
+            strong_match_conversion: arrangement.strong_match_conversion,
+        })
+    }
 }
 
 /// List all user’s arrangements
 #[openapi(tag = "Arrangement")]
 #[get("/arrangement")]
-pub async fn list_arrangements(db: &State<DBPool>, user: User) -> Result<Json<Vec<Arrangement>>, ErrorResponder> {
+pub async fn list_arrangements(db: &State<DBPool>, user: User) -> Result<Json<Vec<ArrangementResponse>>, ErrorResponder> {
     let conn = &mut db.get().unwrap();
-    let arrangements = Arrangement::from_user_id(conn, user.id)?;
+    let arrangements_with_groups = Arrangement::from_user_id_with_groups(conn, user.id)?;
+
+    let arrangements = arrangements_with_groups
+        .into_iter()
+        .map(|(arrangement, groups)| {
+            Ok(ArrangementResponse {
+                arrangement: ArrangementResponseArrangement::try_from(arrangement)?,
+                groups: groups.iter().filter(|g| !g.to_be_deleted).cloned().collect_vec(),
+                to_be_deleted_groups: groups.into_iter().filter(|g| g.to_be_deleted).collect_vec(),
+            })
+        })
+        .collect::<Result<Vec<_>, ErrorResponder>>()?;
+
     Ok(Json(arrangements))
 }
 
@@ -46,22 +80,31 @@ pub async fn create_arrangement(db: &State<DBPool>, user: User, data: Json<Arran
     let mut conn = &mut db.get().unwrap();
 
     err_transaction(&mut conn, |conn| {
+        // Create the arrangement and persist it in the database
         let mut arrangement = Arrangement::new(conn, user.id, data.name.clone(), data.strong_match_conversion, None)?;
 
-        // Create strategy
+        // Create strategy (will eventually create groups)
         let strategy = match &data.strategy {
             Some(strategy_req) => Some(strategy_req.create(conn, arrangement.id)?),
             None => None,
         };
 
-        // Save strategy in the arrangement
-        arrangement.set_strategy(conn, strategy)?;
-
-        // TODO: Check all pictures against this new arrangement
+        if strategy.is_some() {
+            // Save strategy in the arrangement
+            arrangement.set_strategy(conn, strategy.clone())?;
+            // Group all pictures according to the strategy
+            group_pictures(conn, user.id, None, Some(arrangement.id), None, false)?;
+        }
 
         Ok(Json(ArrangementResponse {
-            arrangement,
-            groups: vec![],
+            groups: Group::from_arrangement(conn, arrangement.id, false)?,
+            arrangement: ArrangementResponseArrangement {
+                id: arrangement.id,
+                user_id: arrangement.user_id,
+                name: arrangement.name,
+                strong_match_conversion: arrangement.strong_match_conversion,
+                strategy,
+            },
             to_be_deleted_groups: vec![],
         }))
     })
@@ -92,7 +135,7 @@ pub async fn edit_arrangement(
         };
 
         // 2. Update the arrangement in the database
-        Arrangement::update(conn, arrangement.id, &request.name, request.strong_match_conversion, &new_strategy)?;
+        let arrangement = Arrangement::update(conn, arrangement.id, &request.name, request.strong_match_conversion, &new_strategy)?;
 
         // 4. Check all pictures against this edited arrangement
         if new_strategy.is_some() {
@@ -105,7 +148,13 @@ pub async fn edit_arrangement(
         let to_be_deleted_groups = groups.iter().filter(|g| g.to_be_deleted).cloned().collect_vec();
 
         Ok(Json(ArrangementResponse {
-            arrangement,
+            arrangement: ArrangementResponseArrangement {
+                id: arrangement.id,
+                user_id: arrangement.user_id,
+                name: arrangement.name,
+                strong_match_conversion: arrangement.strong_match_conversion,
+                strategy: new_strategy,
+            },
             groups: not_to_be_deleted_groups,
             to_be_deleted_groups,
         }))

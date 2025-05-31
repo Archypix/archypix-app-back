@@ -1,4 +1,5 @@
 use crate::database::database::DBConn;
+use crate::database::group::group::Group;
 use crate::database::schema::*;
 use crate::database::user::user::User;
 use crate::grouping::arrangement_strategy::ArrangementStrategy;
@@ -6,6 +7,7 @@ use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::prelude::*;
 use diesel::r2d2::PooledConnection;
 use diesel::{Associations, Identifiable, Queryable, Selectable};
+use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -55,7 +57,7 @@ impl Arrangement {
         name: &String,
         strong_match_conversion: bool,
         strategy: &Option<ArrangementStrategy>,
-    ) -> Result<(), ErrorResponder> {
+    ) -> Result<Arrangement, ErrorResponder> {
         let dependency_type = ArrangementDependencyType::from(strategy);
 
         diesel::update(arrangements::table.filter(arrangements::id.eq(id)))
@@ -67,9 +69,9 @@ impl Arrangement {
                 arrangements::tags_dependant.eq(dependency_type.tags_dependant),
                 arrangements::exif_dependant.eq(dependency_type.exif_dependant),
             ))
-            .execute(conn)
-            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
-        Ok(())
+            .returning(Arrangement::as_returning())
+            .get_result(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
     pub fn from_user_id(conn: &mut DBConn, user_id: i32) -> Result<Vec<Arrangement>, ErrorResponder> {
@@ -77,6 +79,18 @@ impl Arrangement {
             .filter(arrangements::user_id.eq(user_id))
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn from_user_id_with_groups(conn: &mut DBConn, user_id: i32) -> Result<Vec<(Arrangement, Vec<Group>)>, ErrorResponder> {
+        let arrangements = Self::from_user_id(conn, user_id)?;
+        let groups = Group::from_user_id_all(conn, user_id)?;
+
+        Ok(arrangements
+            .into_iter()
+            .map(|arrangement| {
+                let arrangement_groups = groups.iter().filter(|group| group.arrangement_id == arrangement.id).cloned().collect();
+                (arrangement, arrangement_groups)
+            })
+            .collect_vec())
     }
     pub fn from_id_and_user_id(conn: &mut DBConn, arrangement_id: i32, user_id: i32) -> Result<Arrangement, ErrorResponder> {
         Self::from_id_and_user_id_opt(conn, arrangement_id, user_id)?.ok_or_else(|| ErrorType::ArrangementNotFound.res())

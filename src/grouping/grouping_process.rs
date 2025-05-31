@@ -222,7 +222,7 @@ fn group_manage_removed_pictures(conn: &mut DBConn, group_id: i32, removed_pictu
         let unaccessible_pictures = Picture::filter_user_accessible_pictures(conn, shared_group.user_id, &removed_pictures)?;
 
         // Delete pictures from user groups
-        Group::from_user_id(conn, shared_group.user_id)?
+        Group::from_user_id_all(conn, shared_group.user_id)?
             .into_iter()
             .try_for_each(|group| group_remove_pictures(conn, group.id, &unaccessible_pictures))?;
     }

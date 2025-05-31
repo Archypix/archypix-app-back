@@ -46,6 +46,14 @@ impl Group {
             .get_results(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
+    /// Retrieves all groups for a given arrangement
+    pub fn from_arrangement(conn: &mut DBConn, arrangement_id: i32, to_be_deleted: bool) -> Result<Vec<Group>, ErrorResponder> {
+        groups::table
+            .filter(groups::arrangement_id.eq(arrangement_id))
+            .filter(groups::to_be_deleted.eq(to_be_deleted))
+            .get_results(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
     pub fn from_id_and_arrangement(conn: &mut DBConn, group_id: i32, arrangement_id: i32) -> Result<Group, ErrorResponder> {
         groups::table
             .filter(groups::id.eq(group_id))
@@ -53,7 +61,8 @@ impl Group {
             .first(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
-    pub fn from_user_id(conn: &mut DBConn, user_id: i32) -> Result<Vec<Group>, ErrorResponder> {
+    /// Retrieves all groups for a given user, including those marked for deletion.
+    pub fn from_user_id_all(conn: &mut DBConn, user_id: i32) -> Result<Vec<Group>, ErrorResponder> {
         groups::table
             .inner_join(arrangements::table.on(groups::arrangement_id.eq(arrangements::id)))
             .filter(arrangements::user_id.eq(user_id))
