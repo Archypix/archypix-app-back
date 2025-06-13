@@ -85,7 +85,7 @@ impl ArrangementStrategyRequest {
         })
     }
     pub fn edit(&self, conn: &mut DBConn, arrangement_id: i32, old_strategy: &ArrangementStrategy) -> Result<ArrangementStrategy, ErrorResponder> {
-        let groupings = self.groupings.edit_strategy_grouping(conn, arrangement_id, &old_strategy.groupings)?;
+        let groupings = old_strategy.groupings.edit_strategy_grouping(conn, arrangement_id, &self.groupings)?;
         Ok(ArrangementStrategy {
             filter: self.filter.clone(),
             groupings,

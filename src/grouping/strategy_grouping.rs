@@ -121,6 +121,31 @@ impl StrategyGrouping {
             StrategyGrouping::GroupByExifValues(_) | StrategyGrouping::GroupByExifInterval(_) | StrategyGrouping::GroupByLocation(_) => todo!(),
         }
     }
+
+    pub fn edit_strategy_grouping(
+        &self,
+        conn: &mut DBConn,
+        arrangement_id: i32,
+        new_grouping: &StrategyGroupingRequest,
+    ) -> Result<StrategyGrouping, ErrorResponder> {
+        match (new_grouping, self) {
+            (StrategyGroupingRequest::GroupByFilter(req), StrategyGrouping::GroupByFilter(old)) => {
+                let mut new = old.clone();
+                new.edit(conn, arrangement_id, req)?;
+                Ok(StrategyGrouping::GroupByFilter(new))
+            }
+            (StrategyGroupingRequest::GroupByTags(req), StrategyGrouping::GroupByTags(old)) => {
+                let mut new = old.clone();
+                new.edit(conn, arrangement_id, req)?;
+                Ok(StrategyGrouping::GroupByTags(new))
+            }
+            _ => {
+                // Different types - delete old and create new
+                self.delete(conn, arrangement_id)?;
+                new_grouping.create_strategy_grouping(conn, arrangement_id)
+            }
+        }
+    }
 }
 
 #[derive(EnumKind, Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -140,30 +165,6 @@ impl StrategyGroupingRequest {
             StrategyGroupingRequest::GroupByTags(request) => {
                 let grouping = TagGrouping::create(conn, arrangement_id, request)?;
                 Ok(StrategyGrouping::GroupByTags(*grouping))
-            }
-        }
-    }
-    pub fn edit_strategy_grouping(
-        &self,
-        conn: &mut DBConn,
-        arrangement_id: i32,
-        old_grouping: &StrategyGrouping,
-    ) -> Result<StrategyGrouping, ErrorResponder> {
-        match (self, old_grouping) {
-            (StrategyGroupingRequest::GroupByFilter(req), StrategyGrouping::GroupByFilter(old)) => {
-                let mut new = old.clone();
-                new.edit(conn, arrangement_id, req)?;
-                Ok(StrategyGrouping::GroupByFilter(new))
-            }
-            (StrategyGroupingRequest::GroupByTags(req), StrategyGrouping::GroupByTags(old)) => {
-                let mut new = old.clone();
-                new.edit(conn, arrangement_id, req)?;
-                Ok(StrategyGrouping::GroupByTags(new))
-            }
-            _ => {
-                // Different types - delete old and create new
-                old_grouping.delete(conn, arrangement_id)?;
-                self.create_strategy_grouping(conn, arrangement_id)
             }
         }
     }

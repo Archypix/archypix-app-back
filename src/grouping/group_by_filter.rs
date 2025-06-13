@@ -92,15 +92,55 @@ impl StrategyGroupingTrait for FilterGrouping {
         Ok(update_strategy)
     }
 
+    /// Create one group per filter and no other group by deafault.
     fn create(conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<Box<Self>, ErrorResponder> {
-        todo!()
+        let filters = request
+            .filters
+            .iter()
+            .map(|(group_name, filter)| {
+                let group = Group::insert(conn, arrangement_id, group_name.clone(), false)?;
+                Ok((group.id, filter.clone()))
+            })
+            .collect::<Result<HashMap<i32, StrategyFiltering>, ErrorResponder>>()?;
+        Ok(Box::new(FilterGrouping {
+            filters,
+            other_group_id: None,
+        }))
     }
 
+    /// Tries to match FilteringStrategy to the existing ones.
+    /// Mark unmatched groups as "to be deleted" in the database.
+    /// Create new groups for unmatched new groups.
     fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder> {
-        todo!()
-    }
+        let mut new_filters: HashMap<i32, StrategyFiltering> = HashMap::new();
+        let mut new_filters_req = request.filters.clone(); // Keep track of the unmatched filters
 
+        self.filters.iter_mut().try_for_each(|(old_group_id, old_filter)| {
+            if let Some((group_name, _filter)) = request.filters.iter().find(|(_name, filter)| old_filter.eq(filter)) {
+                // Edit the group name (no way to tell if it was changed or not from the strategy)
+                Group::rename(conn, *old_group_id, group_name.clone())?;
+                new_filters_req.remove(group_name);
+                new_filters.insert(*old_group_id, old_filter.clone());
+            } else {
+                // Mark the group as to be deleted
+                Group::mark_as_to_be_deleted(conn, *old_group_id)?;
+            }
+            Ok::<(), ErrorResponder>(())
+        })?;
+        // Create new groups for the unmatched filters
+        for (group_name, filter) in new_filters_req {
+            let group = Group::insert(conn, arrangement_id, group_name.clone(), false)?;
+            new_filters.insert(group.id, filter.clone());
+        }
+        // Update the filters with the new ones
+        self.filters = new_filters;
+        Ok(())
+    }
+    /// Marks all groups as "to be deleted" in the database, allowing the strategy to be deleted (and replaced by another one).
     fn delete(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
-        todo!()
+        for group_id in self.get_groups() {
+            Group::mark_as_to_be_deleted(conn, group_id)?;
+        }
+        Ok(())
     }
 }

@@ -105,14 +105,38 @@ impl StrategyGroupingTrait for TagGrouping {
     }
 
     fn create(conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<Box<Self>, ErrorResponder> {
-        todo!()
+        // Nothing to do: the groups are created when grouping pictures.
+        Ok(Box::new(TagGrouping {
+            tag_group_id: request.tag_group_id,
+            tag_id_to_group_id: HashMap::new(),
+            other_group_id: None,
+            group_names_format: request.group_names_format.clone(),
+        }))
     }
 
     fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder> {
-        todo!()
+        if self.tag_group_id != request.tag_group_id {
+            // If the tag group has changed, we need to clear the groups and re-group.
+            self.tag_group_id = request.tag_group_id;
+            self.group_names_format = request.group_names_format.clone();
+            self.tag_id_to_group_id.clear();
+            self.other_group_id = None;
+
+            // Clear all pictures from the groups.
+            for group_id in self.get_groups() {
+                Group::mark_as_to_be_deleted(conn, group_id)?;
+            }
+        } else if self.group_names_format != request.group_names_format {
+            self.group_names_format = request.group_names_format.clone();
+            // TODO: rename groups
+        }
+        Ok(())
     }
 
     fn delete(&self, conn: &mut DBConn, arrangement_id: i32) -> Result<(), ErrorResponder> {
-        todo!()
+        for group_id in self.get_groups() {
+            Group::mark_as_to_be_deleted(conn, group_id)?;
+        }
+        Ok(())
     }
 }

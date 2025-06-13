@@ -1,5 +1,4 @@
 use crate::database::database::DBConn;
-use crate::database::group::arrangement;
 use crate::database::group::arrangement::Arrangement;
 use crate::database::schema::*;
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
@@ -68,6 +67,19 @@ impl Group {
             .filter(arrangements::user_id.eq(user_id))
             .select(Group::as_select())
             .load(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+
+    pub fn rename(conn: &mut DBConn, group_id: i32, name: String) -> Result<Group, ErrorResponder> {
+        diesel::update(groups::table.filter(groups::id.eq(group_id)))
+            .set(groups::name.eq(name))
+            .get_result(conn)
+            .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
+    }
+    pub fn mark_as_to_be_deleted(conn: &mut DBConn, group_id: i32) -> Result<Group, ErrorResponder> {
+        diesel::update(groups::table.filter(groups::id.eq(group_id)))
+            .set(groups::to_be_deleted.eq(true))
+            .get_result(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())
     }
 
