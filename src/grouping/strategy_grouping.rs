@@ -128,13 +128,13 @@ impl StrategyGrouping {
         arrangement_id: i32,
         new_grouping: &StrategyGroupingRequest,
     ) -> Result<StrategyGrouping, ErrorResponder> {
-        match (new_grouping, self) {
-            (StrategyGroupingRequest::GroupByFilter(req), StrategyGrouping::GroupByFilter(old)) => {
+        match (self, new_grouping) {
+            (StrategyGrouping::GroupByFilter(old), StrategyGroupingRequest::GroupByFilter(req)) => {
                 let mut new = old.clone();
                 new.edit(conn, arrangement_id, req)?;
                 Ok(StrategyGrouping::GroupByFilter(new))
             }
-            (StrategyGroupingRequest::GroupByTags(req), StrategyGrouping::GroupByTags(old)) => {
+            (StrategyGrouping::GroupByTags(old), StrategyGroupingRequest::GroupByTags(req)) => {
                 let mut new = old.clone();
                 new.edit(conn, arrangement_id, req)?;
                 Ok(StrategyGrouping::GroupByTags(new))

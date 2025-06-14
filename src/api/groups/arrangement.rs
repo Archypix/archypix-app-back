@@ -122,7 +122,7 @@ pub async fn edit_arrangement(
 
     err_transaction(&mut conn, |conn| {
         // 1. Update the groups of the arrangement due to the strategy change (marks old groups as "to be deleted", and create the required new ones).
-        let new_strategy = match (&arrangement.get_strategy()?, &request.strategy) {
+        let new_strategy = match (arrangement.get_strategy()?, &request.strategy) {
             (Some(old_strategy), Some(new_strategy_req)) => Some(new_strategy_req.edit(conn, arrangement.id, old_strategy)?),
             (None, Some(new_strategy)) => {
                 Group::mark_all_as_to_be_deleted(conn, arrangement.id)?;

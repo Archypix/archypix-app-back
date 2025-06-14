@@ -1,7 +1,7 @@
 use crate::database::database::DBConn;
 use crate::database::group::arrangement::ArrangementDetails;
 use crate::database::group::group::Group;
-use crate::grouping::grouping_process::{group_add_pictures, group_remove_pictures};
+use crate::grouping::grouping_process::group_add_pictures;
 use crate::grouping::strategy_filtering::StrategyFiltering;
 use crate::grouping::strategy_grouping::{StrategyGroupingTrait, UngroupRecord};
 use crate::utils::errors_catcher::ErrorResponder;
@@ -9,11 +9,16 @@ use itertools::Itertools;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FilterGroupingRequest {
-    pub filters: HashMap<String, StrategyFiltering>, // Key is the group name, value is the filter
+    pub filters: Vec<FilterGroupingValueRequest>,
+}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FilterGroupingValueRequest {
+    pub id: i32, // <= 0 for new groups
+    pub name: String,
+    pub filter: StrategyFiltering,
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
@@ -97,9 +102,9 @@ impl StrategyGroupingTrait for FilterGrouping {
         let filters = request
             .filters
             .iter()
-            .map(|(group_name, filter)| {
-                let group = Group::insert(conn, arrangement_id, group_name.clone(), false)?;
-                Ok((group.id, filter.clone()))
+            .map(|value| {
+                let group = Group::insert(conn, arrangement_id, value.name.clone(), false)?;
+                Ok((group.id, value.filter.clone()))
             })
             .collect::<Result<HashMap<i32, StrategyFiltering>, ErrorResponder>>()?;
         Ok(Box::new(FilterGrouping {
@@ -112,28 +117,29 @@ impl StrategyGroupingTrait for FilterGrouping {
     /// Mark unmatched groups as "to be deleted" in the database.
     /// Create new groups for unmatched new groups.
     fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder> {
-        let mut new_filters: HashMap<i32, StrategyFiltering> = HashMap::new();
-        let mut new_filters_req = request.filters.clone(); // Keep track of the unmatched filters
+        let old_groups_ids = self.filters.keys().cloned().collect_vec();
 
-        self.filters.iter_mut().try_for_each(|(old_group_id, old_filter)| {
-            if let Some((group_name, _filter)) = request.filters.iter().find(|(_name, filter)| old_filter.eq(filter)) {
-                // Edit the group name (no way to tell if it was changed or not from the strategy)
-                Group::rename(conn, *old_group_id, group_name.clone())?;
-                new_filters_req.remove(group_name);
-                new_filters.insert(*old_group_id, old_filter.clone());
+        // Editing existing groups and delete unmatched ones
+        old_groups_ids.iter().try_for_each(|group_id| {
+            if let Some(value) = request.filters.iter().find(|v| v.id == *group_id) {
+                Group::rename(conn, *group_id, value.name.clone())?;
+                self.filters.insert(*group_id, value.filter.clone());
             } else {
-                // Mark the group as to be deleted
-                Group::mark_as_to_be_deleted(conn, *old_group_id)?;
+                Group::mark_as_to_be_deleted(conn, *group_id)?;
+                self.filters.remove(group_id);
             }
             Ok::<(), ErrorResponder>(())
         })?;
-        // Create new groups for the unmatched filters
-        for (group_name, filter) in new_filters_req {
-            let group = Group::insert(conn, arrangement_id, group_name.clone(), false)?;
-            new_filters.insert(group.id, filter.clone());
-        }
-        // Update the filters with the new ones
-        self.filters = new_filters;
+
+        // Create new groups (with id <= 0 or unmatched)
+        request.filters.iter().try_for_each(|value| {
+            if value.id <= 0 || !self.filters.contains_key(&value.id) {
+                let group = Group::insert(conn, arrangement_id, value.name.clone(), false)?;
+                self.filters.insert(group.id, value.filter.clone());
+            }
+            Ok::<(), ErrorResponder>(())
+        })?;
+
         Ok(())
     }
     /// Marks all groups as "to be deleted" in the database, allowing the strategy to be deleted (and replaced by another one).
