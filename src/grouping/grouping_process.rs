@@ -53,6 +53,12 @@ pub fn group_pictures(
     dependency_type_filter: Option<&ArrangementDependencyType>,
     do_ungroup: bool,
 ) -> Result<(), ErrorResponder> {
+    debug!("Grouping pictures for user {}, pictures: {:?}", user_id, picture_ids_filter);
+    debug!(
+        "Parameters: arrangement_id_filter: {:?}, dependency_type_filter: {:?}, do_ungroup: {}",
+        arrangement_id_filter, dependency_type_filter, do_ungroup
+    );
+
     // Fetch all not manual arrangements and the list of their group ids
     let mut arrangements = Arrangement::list_arrangements_and_groups(conn, user_id)?;
 
@@ -87,12 +93,15 @@ pub fn group_pictures(
 
     for arrangement in arrangements.iter_mut() {
         // Keep only pictures that match this arrangement
-        info!(
-            "Grouping pictures into arrangement: {:?} of user {:?}",
-            arrangement.arrangement.id, user_id
-        );
-
         let pictures_ids: HashSet<i64> = HashSet::from_iter(arrangement.strategy.filter.filter_pictures(conn, picture_ids_filter)?.into_iter());
+
+        info!(
+            "Grouping {} pictures into arrangement {} of user {}",
+            pictures_ids.len(),
+            arrangement.arrangement.id,
+            user_id
+        );
+        debug!("Pictures ids: {:?}", pictures_ids);
 
         // Add pictures to groups
         let mut update_strategy = false;
@@ -154,6 +163,7 @@ pub fn group_pictures(
 ///   - Group them in his context.
 /// - If share match conversion is enabled, apply it to all pictures.
 pub fn group_add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<(), ErrorResponder> {
+    debug!("Adding {} pictures to group {}, (ids: {:?})", picture_ids.len(), group_id, picture_ids);
     if picture_ids.len() == 0 {
         return Ok(());
     }
@@ -184,6 +194,11 @@ pub fn group_add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i6
         // Then, we are adding defaults tags only to pictures that have no tag from the group.
         PictureTag::add_default_tags_to_pictures_without_tags(conn, shared_group.user_id, &gained_access_pictures)?;
 
+        debug!(
+            "Propagating {} added pictures to user {}",
+            gained_access_pictures.len(),
+            shared_group.user_id
+        );
         group_pictures(conn, shared_group.user_id, Some(&gained_access_pictures), None, None, false)?;
 
         // Applying share match conversion if enabled.
@@ -197,6 +212,12 @@ pub fn group_add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i6
 
 /// Remove the pictures from the group, and remove them from all groups of users who lost access to them.
 pub fn group_remove_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<(), ErrorResponder> {
+    debug!(
+        "Removing {} pictures from group {}, (ids: {:?})",
+        picture_ids.len(),
+        group_id,
+        picture_ids
+    );
     if picture_ids.len() == 0 {
         return Ok(());
     }
@@ -209,18 +230,24 @@ pub fn group_remove_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec
 
 /// Remove all the pictures of the group, and remove them from all groups of users who lost access to them.
 pub fn group_clear_pictures(conn: &mut DBConn, group_id: i32) -> Result<(), ErrorResponder> {
+    debug!("Removing all pictures from group {}", group_id);
     let removed_pictures = Group::clear_and_get_pictures(conn, group_id)?;
     if removed_pictures.len() == 0 {
         return Ok(());
     }
     group_manage_removed_pictures(conn, group_id, removed_pictures)
 }
-
+/// Propagate the removal of the pictures to all groups of users who lost access to them.
 fn group_manage_removed_pictures(conn: &mut DBConn, group_id: i32, removed_pictures: Vec<i64>) -> Result<(), ErrorResponder> {
     let shared_groups = SharedGroup::from_group_id(conn, group_id)?;
     for shared_group in shared_groups.iter() {
         let unaccessible_pictures = Picture::filter_user_accessible_pictures(conn, shared_group.user_id, &removed_pictures)?;
 
+        debug!(
+            "Propagating {} removed pictures to user {}",
+            unaccessible_pictures.len(),
+            shared_group.user_id
+        );
         // Delete pictures from user groups
         Group::from_user_id_all(conn, shared_group.user_id)?
             .into_iter()

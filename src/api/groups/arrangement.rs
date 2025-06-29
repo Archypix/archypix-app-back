@@ -138,7 +138,7 @@ pub async fn edit_arrangement(
         // 4. Check all pictures against this edited arrangement
         if new_strategy.is_some() {
             // Arrangement is not manual -> act like if the arrangement was just created
-            group_pictures(conn, user.id, None, Some(arrangement.id), None, false)?;
+            group_pictures(conn, user.id, None, Some(arrangement.id), None, true)?;
         }
 
         let groups = Group::from_arrangement_all(conn, arrangement.id)?;

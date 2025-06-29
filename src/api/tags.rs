@@ -1,10 +1,12 @@
 use crate::api::query_pictures::PicturesQuery;
 use crate::database::database::{DBConn, DBPool};
+use crate::database::group::arrangement::ArrangementDependencyType;
 use crate::database::picture::picture::Picture;
 use crate::database::picture::picture_tag::PictureTag;
 use crate::database::tag::tag::Tag;
 use crate::database::tag::tag_group::{TagGroup, TagGroupWithTags};
 use crate::database::user::user::User;
+use crate::grouping::grouping_process::group_pictures;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorType};
 use itertools::Itertools;
 use rocket::serde::json::Json;
@@ -195,69 +197,6 @@ pub async fn delete_tag_group(data: Json<IDOnly>, db: &State<DBPool>, user: User
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct TagIdWithPictureIds {
-    pub tag_id: i32,
-    pub picture_ids: Vec<i64>,
-}
-
-/// Add a tag to a list of pictures
-/// The user can add tags to pictures he does not own as long as the tag is his own.
-/// If the tag is not multiple, any picture already having a tag of the same tag group will lose the old tag in favor of the new one.
-#[openapi(tag = "Tags")]
-#[post("/add_tag_to_picture", data = "<data>")]
-pub async fn add_tag_to_pictures(db: &State<DBPool>, user: User, data: Json<TagIdWithPictureIds>) -> Result<(), ErrorResponder> {
-    let mut conn: &mut DBConn = &mut db.get().unwrap();
-
-    // Check that the user is the owner of the tag group
-    let tag = Tag::from_id(conn, data.tag_id)?;
-    let tag_group = TagGroup::from_id(conn, tag.tag_group_id)?;
-    if tag_group.user_id != user.id {
-        return ErrorType::Unauthorized.res_err();
-    }
-
-    err_transaction(&mut conn, |conn| {
-        if !tag_group.multiple {
-            tag_group.remove_pictures(conn, &data.picture_ids)?;
-        }
-        PictureTag::add_pictures(conn, tag.id, &data.picture_ids)?;
-
-        // TODO: check these pictures against arrangement that depends on tag groups.
-
-        Ok(())
-    })
-}
-
-/// Remove a tag from a list of pictures
-/// The user can remove tags from pictures he does not own as long as the tag is his own.
-/// If the tag is required, the picture will be tagged with the default tag of the tag group.
-#[openapi(tag = "Tags")]
-#[delete("/remove_tag_from_picture", data = "<data>")]
-pub async fn remove_tag_from_pictures(db: &State<DBPool>, user: User, data: Json<TagIdWithPictureIds>) -> Result<(), ErrorResponder> {
-    let mut conn: &mut DBConn = &mut db.get().unwrap();
-
-    // Check that the user is the owner of the tag group
-    let tag = Tag::from_id(conn, data.tag_id)?;
-    let tag_group = TagGroup::from_id(conn, tag.tag_group_id)?;
-    if tag_group.user_id != user.id {
-        return ErrorType::Unauthorized.res_err();
-    }
-
-    err_transaction(&mut conn, |conn| {
-        PictureTag::remove_pictures(conn, tag.id, &data.picture_ids)?;
-        if tag_group.required {
-            // Get the default tag of the group
-            let default_tag = Tag::list_tags(conn, tag_group.id.unwrap())?
-                .into_iter()
-                .find(|tag| tag.is_default)
-                .ok_or_else(|| ErrorType::InternalError("Required tag group without any default tag".to_string()).res())?;
-            // Add the default tag to the pictures
-            TagGroup::add_default_tag_to_pictures_without_tag_from_list(conn, default_tag.id, tag_group.id.unwrap(), &data.picture_ids)?;
-        }
-        Ok(())
-    })
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
 pub struct EditPictureTagsRequest {
     pub picture_ids: Vec<i64>,
     pub add_tag_ids: Vec<i32>,
@@ -360,7 +299,15 @@ pub async fn edit_picture_tags(db: &State<DBPool>, user: User, data: Json<EditPi
             }
         }
 
-        // TODO: check these pictures against arrangement that depends on tag groups.
+        // Regroup the pictures
+        group_pictures(
+            conn,
+            user.id,
+            Some(&data.picture_ids),
+            None,
+            Some(&ArrangementDependencyType::new_tags_dependant()),
+            true,
+        )?;
 
         Ok(Json(PictureTag::get_picture_tags(conn, data.picture_ids[0], user.id)?))
     })

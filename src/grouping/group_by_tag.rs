@@ -10,7 +10,7 @@ use crate::utils::errors_catcher::ErrorResponder;
 use itertools::Itertools;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::JsonSchema;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TagGroupingRequest {
@@ -20,7 +20,7 @@ pub struct TagGroupingRequest {
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TagGrouping {
     pub tag_group_id: i32,
-    pub tag_id_to_group_id: HashMap<i32, i32>,
+    pub tag_id_to_group_id: BTreeMap<i32, i32>,
     pub other_group_id: Option<i32>,
     pub group_names_format: String,
 }
@@ -108,7 +108,7 @@ impl StrategyGroupingTrait for TagGrouping {
         // Nothing to do: the groups are created when grouping pictures.
         Ok(Box::new(TagGrouping {
             tag_group_id: request.tag_group_id,
-            tag_id_to_group_id: HashMap::new(),
+            tag_id_to_group_id: BTreeMap::new(),
             other_group_id: None,
             group_names_format: request.group_names_format.clone(),
         }))

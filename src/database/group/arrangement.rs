@@ -210,6 +210,7 @@ impl PartialEq for ArrangementDetails {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ArrangementDependencyType {
     pub groups_dependant: bool,
     pub tags_dependant: bool,

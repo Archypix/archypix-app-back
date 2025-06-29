@@ -23,10 +23,9 @@ use crate::api::picture::{
 };
 use crate::api::query_pictures::{okapi_add_operation_for_query_pictures_, query_pictures};
 use crate::api::tags::{
-    add_tag_to_pictures, create_tag_group, delete_tag_group, edit_picture_tags, list_tags, okapi_add_operation_for_add_tag_to_pictures_,
-    okapi_add_operation_for_create_tag_group_, okapi_add_operation_for_delete_tag_group_, okapi_add_operation_for_edit_picture_tags_,
-    okapi_add_operation_for_list_tags_, okapi_add_operation_for_patch_tag_group_, okapi_add_operation_for_remove_tag_from_pictures_, patch_tag_group,
-    remove_tag_from_pictures,
+    create_tag_group, delete_tag_group, edit_picture_tags, list_tags, okapi_add_operation_for_create_tag_group_,
+    okapi_add_operation_for_delete_tag_group_, okapi_add_operation_for_edit_picture_tags_, okapi_add_operation_for_list_tags_,
+    okapi_add_operation_for_patch_tag_group_, patch_tag_group,
 };
 use crate::database::database::{get_connection, get_connection_pool};
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
@@ -105,9 +104,14 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 #[launch]
 #[tokio::main]
 async fn rocket() -> _ {
-    env_logger::Builder::new().filter(None, LevelFilter::Debug).init();
+    env_logger::Builder::new()
+        .filter(None, LevelFilter::Info)
+        .filter_module("rocket_cors", LevelFilter::Warn)
+        .filter_module("archypix_app_back", LevelFilter::Trace)
+        .init();
 
     info!("Starting Archypix app backend...");
+    trace!("Backend version: {}", env!("CARGO_PKG_VERSION"));
     dotenv().ok();
 
     // Migrate SQL database
@@ -121,8 +125,8 @@ async fn rocket() -> _ {
     // Create pictures temp directories
     create_temp_directories();
 
+    let cors = cors_options();
     rocket::build()
-        .attach(cors_options())
         .manage(picture_storer)
         .manage(get_connection_pool())
         .manage(UserAgentParser::from_path("./static/user_agent_regexes.yaml").unwrap())
@@ -148,8 +152,6 @@ async fn rocket() -> _ {
                 create_tag_group,
                 patch_tag_group,
                 delete_tag_group,
-                add_tag_to_pictures,
-                remove_tag_from_pictures,
                 edit_picture_tags,
                 // Arrangements
                 list_arrangements,
@@ -162,7 +164,6 @@ async fn rocket() -> _ {
                 remove_pictures_from_group
             ],
         )
-        .register("/", catchers![bad_request, unauthorized, not_found, unprocessable_entity, internal_error])
         .mount(
             "/swagger-ui/",
             make_swagger_ui(&SwaggerUIConfig {
@@ -185,6 +186,10 @@ async fn rocket() -> _ {
                 ..Default::default()
             }),
         )
+        .mount("/", rocket_cors::catch_all_options_routes())
+        .attach(cors.clone())
+        .manage(cors)
+        .register("/", catchers![bad_request, unauthorized, not_found, unprocessable_entity, internal_error])
 }
 
 /// CORS configuration

@@ -1,13 +1,14 @@
 use crate::database::database::DBConn;
-use crate::database::group::arrangement::ArrangementDetails;
 use crate::database::group::group::Group;
 use crate::grouping::grouping_process::group_add_pictures;
 use crate::grouping::strategy_filtering::StrategyFiltering;
 use crate::grouping::strategy_grouping::{StrategyGroupingTrait, UngroupRecord};
 use crate::utils::errors_catcher::ErrorResponder;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::JsonSchema;
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
@@ -23,9 +24,10 @@ pub struct FilterGroupingValueRequest {
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FilterGrouping {
-    pub filters: HashMap<i32, StrategyFiltering>, // Key is the group id, value is the filter
-    pub other_group_id: Option<i32>,              // Id of the group for the pictures that do not match any filter
+    pub filters: Vec<(i32, StrategyFiltering)>, // (group_id, filter)
+    pub other_group_id: Option<i32>,            // Id of the group for the pictures that do not match any filter
 }
+
 impl FilterGrouping {
     fn get_or_create_other_group(&mut self, conn: &mut DBConn, arrangement_id: i32) -> Result<(i32, bool), ErrorResponder> {
         if let Some(id) = self.other_group_id {
@@ -37,20 +39,20 @@ impl FilterGrouping {
         }
     }
     pub fn is_groups_dependant(&self) -> bool {
-        self.filters.values().into_iter().any(|f| f.is_groups_dependant())
+        self.filters.iter().any(|f| f.1.is_groups_dependant())
     }
     pub fn is_tags_dependant(&self) -> bool {
-        self.filters.values().into_iter().any(|f| f.is_tags_dependant())
+        self.filters.iter().any(|f| f.1.is_tags_dependant())
     }
     pub fn is_exif_dependant(&self) -> bool {
-        self.filters.values().into_iter().any(|f| f.is_exif_dependant())
+        self.filters.iter().any(|f| f.1.is_exif_dependant())
     }
 }
 impl StrategyGroupingTrait for FilterGrouping {
     type Request = FilterGroupingRequest;
 
     fn get_groups(&self) -> Vec<i32> {
-        let mut groups: Vec<i32> = self.filters.keys().cloned().collect();
+        let mut groups: Vec<i32> = self.filters.iter().map(|f| f.0).collect();
         if let Some(id) = self.other_group_id {
             (&mut groups).push(id);
         }
@@ -97,7 +99,7 @@ impl StrategyGroupingTrait for FilterGrouping {
         Ok(update_strategy)
     }
 
-    /// Create one group per filter and no other group by deafault.
+    /// Create one group per filter and no other group by default.
     fn create(conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<Box<Self>, ErrorResponder> {
         let filters = request
             .filters
@@ -106,7 +108,7 @@ impl StrategyGroupingTrait for FilterGrouping {
                 let group = Group::insert(conn, arrangement_id, value.name.clone(), false)?;
                 Ok((group.id, value.filter.clone()))
             })
-            .collect::<Result<HashMap<i32, StrategyFiltering>, ErrorResponder>>()?;
+            .collect::<Result<Vec<(i32, StrategyFiltering)>, ErrorResponder>>()?;
         Ok(Box::new(FilterGrouping {
             filters,
             other_group_id: None,
@@ -117,28 +119,47 @@ impl StrategyGroupingTrait for FilterGrouping {
     /// Mark unmatched groups as "to be deleted" in the database.
     /// Create new groups for unmatched new groups.
     fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder> {
-        let old_groups_ids = self.filters.keys().cloned().collect_vec();
+        let old_groups_ids = self.filters.iter().map(|f| f.0).collect_vec();
 
         // Editing existing groups and delete unmatched ones
         old_groups_ids.iter().try_for_each(|group_id| {
             if let Some(value) = request.filters.iter().find(|v| v.id == *group_id) {
                 Group::rename(conn, *group_id, value.name.clone())?;
-                self.filters.insert(*group_id, value.filter.clone());
+                self.filters.iter_mut().find(|f| f.0 == *group_id).map(|f| f.1 = value.filter.clone());
             } else {
                 Group::mark_as_to_be_deleted(conn, *group_id)?;
-                self.filters.remove(group_id);
+                self.filters.retain(|f| f.0 != *group_id);
             }
             Ok::<(), ErrorResponder>(())
         })?;
 
         // Create new groups (with id <= 0 or unmatched)
         request.filters.iter().try_for_each(|value| {
-            if value.id <= 0 || !self.filters.contains_key(&value.id) {
+            if value.id <= 0 || !self.filters.iter().any(|f| f.0 == value.id) {
                 let group = Group::insert(conn, arrangement_id, value.name.clone(), false)?;
-                self.filters.insert(group.id, value.filter.clone());
+                self.filters.push((group.id, value.filter.clone()));
             }
             Ok::<(), ErrorResponder>(())
         })?;
+
+        // Sort groups in the order of the request
+        debug!("Before sorting: {:#?}", self.filters);
+        self.filters = self
+            .filters
+            .clone()
+            .into_iter()
+            .sorted_by(|a, b| {
+                if let Some(i) = request.filters.iter().position(|v| v.id == a.0) {
+                    if let Some(i2) = request.filters.iter().position(|v| v.id == b.0) {
+                        debug!("Comparing {} of index {} with {} of index {}", a.0, i, b.0, i2);
+                        return i.cmp(&i2);
+                    }
+                    return Ordering::Less;
+                }
+                Ordering::Greater
+            })
+            .collect();
+        debug!("After sorting: {:#?}", self.filters);
 
         Ok(())
     }

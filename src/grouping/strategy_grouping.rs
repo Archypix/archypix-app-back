@@ -8,6 +8,7 @@ use crate::grouping::group_by_location::LocationGrouping;
 use crate::grouping::group_by_tag::{TagGrouping, TagGroupingRequest};
 use crate::utils::errors_catcher::ErrorResponder;
 use enum_kinds::EnumKind;
+use rocket::http::ext::IntoCollection;
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
@@ -43,7 +44,7 @@ pub trait StrategyGroupingTrait {
 /// Stores all pictures to ungroup, allowing to ungroup them only at the end.
 pub struct UngroupRecord {
     pub enable: bool,
-    pub map: HashMap<i32, HashSet<i64>>,
+    pub map: HashMap<i32, HashSet<i64>>, // group_id -> picture_ids to ungroup
 }
 impl UngroupRecord {
     pub fn new(enable: bool) -> Self {
@@ -85,7 +86,7 @@ impl StrategyGrouping {
         let mut set = Vec::new();
         match self {
             StrategyGrouping::GroupByFilter(f) => {
-                for filter in f.filters.values().into_iter() {
+                for filter in f.filters.iter().cloned().map(|f| f.1) {
                     set.extend(filter.get_dependant_groups());
                 }
             }
