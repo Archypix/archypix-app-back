@@ -119,6 +119,7 @@ impl StrategyGroupingTrait for FilterGrouping {
     /// Mark unmatched groups as "to be deleted" in the database.
     /// Create new groups for unmatched new groups.
     fn edit(&mut self, conn: &mut DBConn, arrangement_id: i32, request: &Self::Request) -> Result<(), ErrorResponder> {
+        let mut request = request.clone();
         let old_groups_ids = self.filters.iter().map(|f| f.0).collect_vec();
 
         // Editing existing groups and delete unmatched ones
@@ -134,16 +135,16 @@ impl StrategyGroupingTrait for FilterGrouping {
         })?;
 
         // Create new groups (with id <= 0 or unmatched)
-        request.filters.iter().try_for_each(|value| {
+        request.filters.iter_mut().try_for_each(|value| {
             if value.id <= 0 || !self.filters.iter().any(|f| f.0 == value.id) {
                 let group = Group::insert(conn, arrangement_id, value.name.clone(), false)?;
                 self.filters.push((group.id, value.filter.clone()));
+                value.id = group.id;
             }
             Ok::<(), ErrorResponder>(())
         })?;
 
         // Sort groups in the order of the request
-        debug!("Before sorting: {:#?}", self.filters);
         self.filters = self
             .filters
             .clone()
@@ -151,7 +152,6 @@ impl StrategyGroupingTrait for FilterGrouping {
             .sorted_by(|a, b| {
                 if let Some(i) = request.filters.iter().position(|v| v.id == a.0) {
                     if let Some(i2) = request.filters.iter().position(|v| v.id == b.0) {
-                        debug!("Comparing {} of index {} with {} of index {}", a.0, i, b.0, i2);
                         return i.cmp(&i2);
                     }
                     return Ordering::Less;
@@ -159,8 +159,6 @@ impl StrategyGroupingTrait for FilterGrouping {
                 Ordering::Greater
             })
             .collect();
-        debug!("After sorting: {:#?}", self.filters);
-
         Ok(())
     }
     /// Marks all groups as "to be deleted" in the database, allowing the strategy to be deleted (and replaced by another one).
