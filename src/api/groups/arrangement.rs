@@ -1,5 +1,5 @@
 use crate::database::database::DBPool;
-use crate::database::group::arrangement::Arrangement;
+use crate::database::group::arrangement::{Arrangement, ArrangementDependencyType};
 use crate::database::group::group::Group;
 use crate::database::group::link_share_group::LinkShareGroups;
 use crate::database::group::shared_group::SharedGroup;
@@ -81,14 +81,14 @@ pub async fn create_arrangement(db: &State<DBPool>, user: User, data: Json<Arran
         // Create the arrangement and persist it in the database
         let mut arrangement = Arrangement::new(conn, user.id, data.name.clone(), data.strong_match_conversion, None)?;
 
-        // Create strategy (will eventually create groups)
+        // Create strategy (will eventually create groups, needs to be done after having created the arrangement)
         let strategy = match &data.strategy {
             Some(strategy_req) => Some(strategy_req.create(conn, arrangement.id)?),
             None => None,
         };
 
         if strategy.is_some() {
-            // Save strategy in the arrangement
+            // Save strategy in the arrangement (will also set the dependency types)
             arrangement.set_strategy(conn, strategy.clone())?;
             // Group all pictures according to the strategy
             group_pictures(conn, user.id, None, Some(arrangement.id), None, false)?;

@@ -66,7 +66,7 @@ pub fn group_pictures(
         return Err(ErrorType::InvalidInput("Cannot filter by arrangement id and dependency type at the same time".to_string()).res());
     }
     if do_ungroup && picture_ids_filter.is_none() {
-        // TODO: No optimization developed for wen editing arrangements. Editing arrangements works like if all pictures were edited for now.
+        // No optimization developed for wen editing arrangements. Editing arrangements works like if all pictures were edited for now.
         //return Err(ErrorType::InvalidInput("Cannot ungroup without a list of picture ids".to_string()).res());
     }
 

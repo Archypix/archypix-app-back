@@ -4,7 +4,7 @@ use crate::grouping::group_by_tag::TagGrouping;
 use crate::grouping::strategy_filtering::FilterType;
 use crate::grouping::strategy_grouping::StrategyGrouping;
 use crate::grouping::topological_sorts::{topological_sort, topological_sort_from};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 
 #[test]
 pub fn test() {
@@ -30,7 +30,7 @@ pub fn create_arrangement_with_dependant_arrangements(id: i32, dependant_arrange
             filter: FilterType::IncludeGroups(vec![1, 5]).to_strategy(),
             groupings: StrategyGrouping::GroupByTags(TagGrouping {
                 tag_group_id: 0,
-                tag_id_to_group_id: HashMap::new(),
+                tag_id_to_group_id: BTreeMap::new(),
                 other_group_id: None,
                 group_names_format: "".to_string(),
             }),

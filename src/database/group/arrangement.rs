@@ -115,9 +115,18 @@ impl Arrangement {
     /// Updates the strategy of this arrangement
     pub fn set_strategy(&mut self, conn: &mut DBConn, strategy: Option<ArrangementStrategy>) -> Result<(), ErrorResponder> {
         self.strategy = Self::strategy_to_binary(&strategy)?;
+        let dependency_type = ArrangementDependencyType::from(&strategy);
+        self.groups_dependant = dependency_type.groups_dependant;
+        self.tags_dependant = dependency_type.tags_dependant;
+        self.exif_dependant = dependency_type.exif_dependant;
 
         diesel::update(arrangements::table.filter(arrangements::id.eq(self.id)))
-            .set(arrangements::strategy.eq(&self.strategy))
+            .set((
+                arrangements::strategy.eq(&self.strategy),
+                arrangements::groups_dependant.eq(self.groups_dependant),
+                arrangements::tags_dependant.eq(self.tags_dependant),
+                arrangements::exif_dependant.eq(self.exif_dependant),
+            ))
             .execute(conn)
             .map_err(|e| ErrorType::DatabaseError(e.to_string(), e).res())?;
         Ok(())
