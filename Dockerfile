@@ -1,18 +1,28 @@
 # Stage 1 - build
-FROM rust:1.81 AS build
+FROM nixos/nix:latest AS build
 WORKDIR /app
 
 COPY . .
-RUN cargo install --path .
+RUN rm .env*
 
-# Stage 2 - production
-FROM debian:bookworm-slim AS final
+ENV NIXPKGS_ALLOW_UNFREE=1
+RUN nix \
+    --extra-experimental-features "nix-command flakes" \
+    build
+
+# Copy the Nix store closure into a directory. The Nix store closure is the
+# entire set of Nix store values that we need for our build.
+RUN mkdir ./nix-store-closure
+RUN cp -R $(nix-store -qR result/) ./nix-store-closure
+
+
+FROM scratch AS prod
 WORKDIR /app
 
-# Libmysqlclient-dev is required for diesel
-RUN apt-get update && apt-get install -y default-libmysqlclient-dev && rm -rf /var/lib/apt/lists/*
+# /nix/store
+COPY --from=build /app/nix-store-closure /nix/store
 # Compiled binary
-COPY --from=build /usr/local/cargo/bin/archypix_app_back /usr/local/bin/archypix_app_back
+COPY --from=build /app/result/bin .
 # Static assets
 COPY --from=build /app/static ./static
 
@@ -20,4 +30,4 @@ ENV ROCKET_ADDRESS=0.0.0.0
 ENV ROCKET_PORT=80
 EXPOSE 80
 
-CMD ["archypix_app_back"]
+CMD ["/app/archypix_app_back"]

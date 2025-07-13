@@ -12,7 +12,7 @@ use tokio::task;
 
 lazy_static! {
     pub static ref TEMPLATES: Tera = {
-        let mut tera = match Tera::new("src/mailing/templates/**/*") {
+        let mut tera = match Tera::new("./static/templates/**/*") {
             Ok(t) => t,
             Err(e) => {
                 error!("Parsing error(s): {}", e);

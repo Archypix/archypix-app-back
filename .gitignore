@@ -1,6 +1,9 @@
 # Cargo target directory
 /target/
 
+# Nix build result symlink
+/result
+
 # Logs
 logs
 *.log
