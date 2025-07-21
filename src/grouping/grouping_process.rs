@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 //   Group only on this arrangement as no other arrangement can reference it.
 // - Edit arrangement:
 //   Clear the arrangements groups. If possible do a difference system to skip unchanged pictured.
-//   If needed to recreate groups, establish a mapping with references and shared groups.
+//   Deleted groups, if referenced by hierarchies, other arrangements, or shared, are marked as "to be deleted" without being deleted.
 //   Group only on this arrangement and all arrangement that depends on it recursively.
 // - Delete arrangement:
 //   Make sure there are no dependent arrangements or shared groups.
@@ -41,9 +41,9 @@ use std::collections::{HashMap, HashSet};
 // | Add/Edit  pictures | Edited   | All
 
 /// Group pictures into arrangements’ groups.
-/// If `do_ungroup` is true, pictures that do not match the arrangement filter will be ungrouped, but `picture_ids_filter` must be provided.
+/// If `do_ungroup` is true, pictures that do not match the arrangement filter will be ungrouped(, but `picture_ids_filter` must be provided not true at the moment due to arrangement editing.).
 /// If `arrangement_id_filter` is provided, only pictures from this arrangement will be grouped.
-/// If `dependency_type_filter` is provided, only pictures from arrangements of this dependency type will be grouped.
+/// If `dependency_type_filter` is provided, only pictures from arrangements of this dependency type or its dependant arrangements will be grouped.
 /// `arrangement_id_filter` and `dependency_type_filter` cannot be used at the same time.
 pub fn group_pictures(
     conn: &mut DBConn,
@@ -66,7 +66,7 @@ pub fn group_pictures(
         return Err(ErrorType::InvalidInput("Cannot filter by arrangement id and dependency type at the same time".to_string()).res());
     }
     if do_ungroup && picture_ids_filter.is_none() {
-        // No optimization developed for wen editing arrangements. Editing arrangements works like if all pictures were edited for now.
+        // No optimization developed for when editing arrangements. Editing arrangements work like if all pictures were edited for now.
         //return Err(ErrorType::InvalidInput("Cannot ungroup without a list of picture ids".to_string()).res());
     }
 
@@ -101,7 +101,7 @@ pub fn group_pictures(
             arrangement.arrangement.id,
             user_id
         );
-        debug!("Pictures ids: {:?}", pictures_ids);
+        debug!("  Pictures ids: {:?}", pictures_ids);
 
         // Add pictures to groups
         let mut update_strategy = false;
@@ -123,16 +123,13 @@ pub fn group_pictures(
             let strategy = arrangement.strategy.clone();
             arrangement.arrangement.set_strategy(conn, Some(strategy))?;
         }
-    }
 
-    if do_ungroup {
-        // Add records for pictures that do not match the arrangement filter
-        for arrangement in arrangements.iter() {
+        if do_ungroup {
             info!(
                 "Ungrouping pictures from arrangement: {:?} of user {:?}",
                 arrangement.arrangement.id, user_id
             );
-            // Pictures that do not match the arrangement filter, but that are in a group of the arrangement.
+            // Pictures that do not match the arrangement filter, but that are in a group of this arrangement.
             let group_ids = arrangement.strategy.groupings.get_groups().clone();
             let ungroup_pictures_ids = arrangement
                 .strategy
@@ -146,12 +143,14 @@ pub fn group_pictures(
             group_ids.into_iter().for_each(|group_id| {
                 ungroup_record.add(group_id, ungroup_pictures_ids_set.clone());
             });
+
+            // Ungroup all records
+            ungroup_record
+                .map
+                .into_iter()
+                .try_for_each(|(group_id, picture_ids)| group_remove_pictures(conn, group_id, &picture_ids.into_iter().collect_vec()))?;
+            ungroup_record = UngroupRecord::new(do_ungroup);
         }
-        // Ungroup all records
-        ungroup_record
-            .map
-            .into_iter()
-            .try_for_each(|(group_id, picture_ids)| group_remove_pictures(conn, group_id, &picture_ids.into_iter().collect_vec()))?;
     }
 
     Ok(())
@@ -163,7 +162,7 @@ pub fn group_pictures(
 ///   - Group them in his context.
 /// - If share match conversion is enabled, apply it to all pictures.
 pub fn group_add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<(), ErrorResponder> {
-    debug!("Adding {} pictures to group {}, (ids: {:?})", picture_ids.len(), group_id, picture_ids);
+    debug!("  Adding {} pictures to group {}, (ids: {:?})", picture_ids.len(), group_id, picture_ids);
     if picture_ids.len() == 0 {
         return Ok(());
     }
@@ -195,7 +194,7 @@ pub fn group_add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i6
         PictureTag::add_default_tags_to_pictures_without_tags(conn, shared_group.user_id, &gained_access_pictures)?;
 
         debug!(
-            "Propagating {} added pictures to user {}",
+            "  Propagating {} added pictures to user {}",
             gained_access_pictures.len(),
             shared_group.user_id
         );
@@ -213,7 +212,7 @@ pub fn group_add_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i6
 /// Remove the pictures from the group, and remove them from all groups of users who lost access to them.
 pub fn group_remove_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec<i64>) -> Result<(), ErrorResponder> {
     debug!(
-        "Removing {} pictures from group {}, (ids: {:?})",
+        "  Removing {} pictures from group {}, (ids: {:?})",
         picture_ids.len(),
         group_id,
         picture_ids
@@ -230,7 +229,7 @@ pub fn group_remove_pictures(conn: &mut DBConn, group_id: i32, picture_ids: &Vec
 
 /// Remove all the pictures of the group, and remove them from all groups of users who lost access to them.
 pub fn group_clear_pictures(conn: &mut DBConn, group_id: i32) -> Result<(), ErrorResponder> {
-    debug!("Removing all pictures from group {}", group_id);
+    debug!("  Removing all pictures from group {}", group_id);
     let removed_pictures = Group::clear_and_get_pictures(conn, group_id)?;
     if removed_pictures.len() == 0 {
         return Ok(());
@@ -244,7 +243,7 @@ fn group_manage_removed_pictures(conn: &mut DBConn, group_id: i32, removed_pictu
         let unaccessible_pictures = Picture::filter_user_accessible_pictures(conn, shared_group.user_id, &removed_pictures)?;
 
         debug!(
-            "Propagating {} removed pictures to user {}",
+            "  Propagating {} removed pictures to user {}",
             unaccessible_pictures.len(),
             shared_group.user_id
         );

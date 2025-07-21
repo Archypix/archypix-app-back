@@ -187,9 +187,10 @@ pub async fn delete_arrangement(db: &State<DBPool>, user: User, arrangement_id: 
 
     // 3. Remove pictures from groups of the arrangement (should be done carefully to remove the pictures from other users if needed)
     let group_ids = Group::from_arrangement_all(conn, arrangement.id)?.into_iter().map(|g| g.id).collect_vec();
-    group_ids.iter().try_for_each(|group_id| group_clear_pictures(conn, *group_id))?;
 
     err_transaction(&mut conn, |conn| {
+        group_ids.iter().try_for_each(|group_id| group_clear_pictures(conn, *group_id))?;
+
         // 4. Delete the shared groups, link share groups, groups, and the arrangement itself
         SharedGroup::delete_by_group_ids(conn, &group_ids)?;
         LinkShareGroups::delete_by_group_ids(conn, &group_ids)?;
