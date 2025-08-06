@@ -64,6 +64,62 @@ pub struct PictureDetails {
     pub tags_ids: Vec<i32>,
     pub ratings: Vec<Rating>,
 }
+/// The first Option is None if value is mixed
+#[derive(Debug, PartialEq, JsonSchema, Serialize)]
+pub struct MixedPicture {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_date: Option<Option<NaiveDateTime>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub copied: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub creation_date: Option<NaiveDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edition_date: Option<NaiveDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<Option<BigDecimal>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<Option<BigDecimal>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub altitude: Option<Option<i16>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<PictureOrientation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<i16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<i16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera_brand: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera_model: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focal_length: Option<Option<BigDecimal>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exposure_time_num: Option<Option<i32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exposure_time_den: Option<Option<i32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iso_speed: Option<Option<i32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub f_number: Option<Option<BigDecimal>>,
+    pub total_size_ko: i32,
+}
+#[derive(Debug, PartialEq, JsonSchema, Serialize)]
+pub struct MixedPictureDetails {
+    pub pictures: MixedPicture,
+    pub common_tags_ids: Vec<i32>,          // Tags that all pictures have
+    pub mixed_tags_ids: Vec<i32>,           // Tags that some but not all pictures have
+    pub average_user_rating: Option<i16>,   // Average ratings of the user, or None if no rating exists
+    pub average_global_rating: Option<i16>, // Average ratings of the user and its friends, or None if no rating exists
+    pub rating_users: Vec<i32>,             // List of friends user IDs that rated the picture
+}
 
 impl Picture {
     pub fn list_all(conn: &mut DBConn, user_id: i32, deleted: bool, shared: Option<bool>) -> Result<Vec<ListPictureData>, ErrorResponder> {
@@ -405,5 +461,105 @@ impl Picture {
         let ratings = Rating::from_picture_id_including_friends(conn, picture_id, user_id)?;
         let tags_ids = PictureTag::get_picture_tags(conn, picture_id, user_id)?;
         Ok(PictureDetails { picture, tags_ids, ratings })
+    }
+
+    /// Get mixed picture details from a vector of picture IDs
+    /// This method efficiently queries the database and calculates mixed properties
+    pub fn get_mixed_picture_details(conn: &mut DBConn, user_id: i32, picture_ids: &Vec<i64>) -> Result<MixedPictureDetails, ErrorResponder> {
+        if picture_ids.is_empty() {
+            return Err(ErrorType::UnprocessableEntity("Picture IDs list cannot be empty".to_string()).res());
+        }
+        // Get all pictures
+        let pictures = Self::get_pictures_details(conn, user_id, picture_ids.clone())?;
+
+        if pictures.is_empty() {
+            return Err(ErrorType::PictureNotFound.res());
+        }
+        // Calculate the MixedPicture
+        let mixed_picture = Self::calculate_mixed_picture(&pictures);
+
+        // Tags processing
+        let (common_tags_ids, mixed_tags_ids) = PictureTag::get_mixed_pictures_tags(conn, user_id, &picture_ids)?;
+        // Rating processing
+        let (average_user_rating, average_global_rating, rating_users) = Rating::get_mixed_pictures_ratings(conn, user_id, &picture_ids)?;
+
+        Ok(MixedPictureDetails {
+            pictures: mixed_picture,
+            common_tags_ids,
+            mixed_tags_ids,
+            average_user_rating,
+            average_global_rating,
+            rating_users,
+        })
+    }
+
+    /// Calculate mixed picture properties from a list of pictures
+    fn calculate_mixed_picture(pictures: &[Picture]) -> MixedPicture {
+        if pictures.is_empty() {
+            return MixedPicture {
+                name: None,
+                comment: None,
+                owner_id: None,
+                author_id: None,
+                deleted_date: None,
+                copied: None,
+                creation_date: None,
+                edition_date: None,
+                latitude: None,
+                longitude: None,
+                altitude: None,
+                orientation: None,
+                width: None,
+                height: None,
+                camera_brand: None,
+                camera_model: None,
+                focal_length: None,
+                exposure_time_num: None,
+                exposure_time_den: None,
+                iso_speed: None,
+                f_number: None,
+                total_size_ko: 0,
+            };
+        }
+
+        #[allow(unused)] // Used by the macro
+        let first = &pictures[0];
+        let total_size_ko = pictures.iter().map(|p| p.size_ko).sum();
+
+        // Helper macro to check if all pictures have the same value for a field
+        macro_rules! check_same {
+            ($field:ident) => {
+                if pictures.iter().all(|p| p.$field == first.$field) {
+                    Some(first.$field.clone())
+                } else {
+                    None
+                }
+            };
+        }
+
+        MixedPicture {
+            name: check_same!(name),
+            comment: check_same!(comment),
+            owner_id: check_same!(owner_id),
+            author_id: check_same!(author_id),
+            deleted_date: check_same!(deleted_date),
+            copied: check_same!(copied),
+            creation_date: check_same!(creation_date),
+            edition_date: check_same!(edition_date),
+            latitude: check_same!(latitude),
+            longitude: check_same!(longitude),
+            altitude: check_same!(altitude),
+            orientation: check_same!(orientation),
+            width: check_same!(width),
+            height: check_same!(height),
+            camera_brand: check_same!(camera_brand),
+            camera_model: check_same!(camera_model),
+            focal_length: check_same!(focal_length),
+            exposure_time_num: check_same!(exposure_time_num),
+            exposure_time_den: check_same!(exposure_time_den),
+            iso_speed: check_same!(iso_speed),
+            f_number: check_same!(f_number),
+            total_size_ko,
+        }
     }
 }

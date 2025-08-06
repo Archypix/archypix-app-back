@@ -1,6 +1,6 @@
 use crate::api::query_pictures::{PictureFilter, PictureSort, PicturesQuery};
 use crate::database::database::{DBConn, DBPool};
-use crate::database::picture::picture::{Picture, PictureDetails};
+use crate::database::picture::picture::{MixedPicture, MixedPictureDetails, Picture, PictureDetails};
 use crate::database::picture::picture_tag::PictureTag;
 use crate::database::schema::pictures::{edition_date, width};
 use crate::database::user::user::User;
@@ -24,6 +24,7 @@ use rocket_okapi::response::OpenApiResponderInner;
 use rocket_okapi::{openapi, JsonSchema};
 use schemars::gen::SchemaGenerator;
 use schemars::schema::{Schema, SchemaObject};
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
@@ -220,14 +221,22 @@ pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Res
     Ok(Json(pictures))
 }
 
-/// Get pictures details
+#[derive(JsonSchema, Deserialize, Debug)]
+pub struct PicturesDetailsQuery {
+    picture_ids: Vec<i64>,
+}
+/// Get pictures details as a MixedPictureDetails object.
+/// It includes the common fields containing the common data, and mixed data as None (serialized as nothing)
+/// Common and mixed tags are also calculated, and statistics about ratings.
 #[openapi(tag = "Picture")]
-#[post("/pictures_details", data = "<picture_ids>")]
-pub async fn get_pictures_details(db: &State<DBPool>, user: User, picture_ids: Json<Vec<i64>>) -> Result<Json<Vec<Picture>>, ErrorResponder> {
+#[post("/pictures_details", data = "<data>")]
+pub async fn get_pictures_details(
+    db: &State<DBPool>,
+    user: User,
+    data: Json<PicturesDetailsQuery>,
+) -> Result<Json<MixedPictureDetails>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
-
-    let pictures = Picture::get_pictures_details(conn, user.id, picture_ids.into_inner())?;
-    Ok(Json(pictures))
+    Ok(Json(Picture::get_mixed_picture_details(conn, user.id, &data.picture_ids)?))
 }
 
 /// Get picture details, includes tags and ratings

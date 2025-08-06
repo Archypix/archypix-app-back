@@ -7,6 +7,7 @@ use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
 use diesel::dsl::{exists, not};
 use diesel::{Associations, ExpressionMethods, Identifiable, JoinOnDsl, QueryDsl, Queryable, RunQueryDsl, Selectable};
 use itertools::Itertools;
+use std::collections::HashMap;
 
 #[derive(Queryable, Selectable, Identifiable, Associations, Debug, PartialEq)]
 #[diesel(primary_key(picture_id, tag_id))]
@@ -24,7 +25,7 @@ impl PictureTag {
         pictures_tags::table
             .filter(pictures_tags::tag_id.eq(tag_id))
             .filter(pictures_tags::picture_id.eq_any(picture_ids))
-            .select((pictures_tags::picture_id))
+            .select(pictures_tags::picture_id)
             .load(conn)
             .map_err(|e| ErrorType::DatabaseError("Failed to get tag pictures".to_string(), e).res())
     }
@@ -118,5 +119,39 @@ impl PictureTag {
                 Self::add_pictures_batch(conn, &default_tags, &pictures_without_tag)?;
                 Ok(())
             })
+    }
+
+    /// Get common and mixed tags from an array of pictures
+    /// Returned tuple contains arrays of tag ids: (common_tags, mixed_tags)
+    pub fn get_mixed_pictures_tags(conn: &mut DBConn, user_id: i32, picture_ids: &[i64]) -> Result<(Vec<i32>, Vec<i32>), ErrorResponder> {
+        let all_tags: Vec<(i64, i32)> = pictures_tags::table
+            .filter(pictures_tags::picture_id.eq_any(picture_ids))
+            .inner_join(tags::table.on(tags::id.eq(pictures_tags::tag_id)))
+            .inner_join(tag_groups::table.on(tag_groups::id.eq(tags::tag_group_id)))
+            .filter(tag_groups::user_id.eq(user_id))
+            .select((pictures_tags::picture_id, pictures_tags::tag_id))
+            .load(conn)
+            .map_err(|e| ErrorType::DatabaseError("Failed to get picture tags".to_string(), e).res())?;
+
+        // Group tags by tag_id and count how many pictures have each tag
+        let mut tag_counts: HashMap<i32, usize> = HashMap::new();
+        for (_, tag_id) in all_tags {
+            *tag_counts.entry(tag_id).or_insert(0) += 1;
+        }
+
+        let total_pictures = picture_ids.len();
+        let mut common_tags = Vec::new();
+        let mut mixed_tags = Vec::new();
+
+        for (tag_id, count) in tag_counts {
+            if count == total_pictures {
+                common_tags.push(tag_id);
+            } else {
+                mixed_tags.push(tag_id);
+            }
+        }
+        common_tags.sort();
+        mixed_tags.sort();
+        Ok((common_tags, mixed_tags))
     }
 }
