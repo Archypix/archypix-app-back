@@ -4,6 +4,7 @@ use rocket::request::FromParam;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
 #[derive(Display, Debug, PartialEq, Clone, Copy, EnumIter, Deserialize, Serialize, JsonSchema)]
@@ -26,6 +27,16 @@ impl PictureThumbnail {
 impl FromParam<'_> for PictureThumbnail {
     type Error = ErrorResponder;
     fn from_param(param: &str) -> Result<Self, Self::Error> {
+        // Check if param is an integer
+        if let Ok(index) = param.parse::<usize>() {
+            return match index {
+                0 => Ok(PictureThumbnail::Original),
+                1 => Ok(PictureThumbnail::Small),
+                2 => Ok(PictureThumbnail::Medium),
+                3 => Ok(PictureThumbnail::Large),
+                _ => ErrorType::NotFound(String::from("Invalid thumbnail index")).res_err_no_rollback(),
+            };
+        }
         match param {
             "original" => Ok(PictureThumbnail::Original),
             "small" => Ok(PictureThumbnail::Small),
