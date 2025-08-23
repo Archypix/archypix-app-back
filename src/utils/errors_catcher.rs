@@ -137,6 +137,7 @@ pub enum ErrorType {
     UnableToLoadExifMetadata(Rexiv2Error),
     S3Error(String),
     UnableToCreateThumbnail(String),
+    UnableToCreateBlurhash(String),
     PictureNotFound,
     // Groups
     GroupIsNotManual,
@@ -218,6 +219,9 @@ impl ErrorType {
             ErrorType::S3Error(msg) => ErrorResponder::InternalError(Self::create_response(format!("S3 error: {}", msg), kind, rollback)),
             ErrorType::UnableToCreateThumbnail(msg) => {
                 ErrorResponder::InternalError(Self::create_response(format!("Unable to create thumbnail: {}", msg), kind, rollback))
+            }
+            ErrorType::UnableToCreateBlurhash(msg) => {
+                ErrorResponder::InternalError(Self::create_response(format!("Unable to create blurhash: {}", msg), kind, rollback))
             }
             ErrorType::PictureNotFound => ErrorResponder::NotFound(Self::create_response("Picture not found".to_string(), kind, rollback)),
             // Groups

@@ -4,16 +4,20 @@ use crate::database::picture::picture::Picture;
 use crate::database::schema::*;
 use crate::database::user::user::User;
 use crate::rocket::futures::StreamExt;
-use crate::utils::errors_catcher::ErrorResponder;
+use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use crate::utils::s3::PictureStorer;
+use crate::utils::thumbnail::{generate_blurhash, PictureThumbnail, THUMBS_TEMP_DIR};
 use diesel::dsl::{exists, not, Filter};
 use diesel::query_dsl::methods;
-use diesel::ExpressionMethods;
 use diesel::QueryDsl;
+use diesel::{update, ExpressionMethods, RunQueryDsl};
+use rand::random;
 use rocket::serde::json::Json;
 use rocket::serde::{Deserialize, Serialize};
 use rocket::State;
 use rocket_okapi::{openapi, JsonSchema};
 use std::cmp::Ordering;
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct PicturesQuery {
@@ -54,5 +58,6 @@ pub enum PictureSort {
 pub async fn query_pictures(db: &State<DBPool>, user: User, query: Json<PicturesQuery>) -> Result<Json<Vec<ListPictureData>>, ErrorResponder> {
     let conn: &mut DBConn = &mut db.get().unwrap();
     let pictures = Picture::query(conn, user.id, query.into_inner(), 100)?;
+
     Ok(Json(pictures))
 }

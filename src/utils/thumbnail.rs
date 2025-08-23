@@ -1,4 +1,5 @@
 use crate::utils::errors_catcher::{ErrorResponder, ErrorType};
+use image::GenericImageView;
 use magick_rust::{magick_wand_genesis, MagickWand};
 use rocket::request::FromParam;
 use schemars::JsonSchema;
@@ -15,7 +16,7 @@ pub enum PictureThumbnail {
     Large = 3,
 }
 impl PictureThumbnail {
-    pub fn get_thumbnail_size(&self) -> Option<usize> {
+    pub fn get_thumbnail_height(&self) -> Option<usize> {
         match self {
             PictureThumbnail::Original => None,
             PictureThumbnail::Small => Some(100),
@@ -69,12 +70,14 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
         return ErrorType::UnableToCreateThumbnail(String::from("Unable to read image")).res_err_no_rollback();
     }
 
-    let size = thumbnail_type.get_thumbnail_size();
-    if size.is_none() {
+    let height = thumbnail_type.get_thumbnail_height();
+    if height.is_none() {
         panic!("Thumbnail size can’t be None: \"Original\" thumbnail type should not be used to generate thumbnails");
     }
-    let size = size.unwrap();
-    wand.fit(size, size);
+    let height = height.unwrap();
+    let width = height * wand.get_image_width() / wand.get_image_height();
+    wand.thumbnail_image(width, height)
+        .map_err(|e| ErrorType::UnableToCreateThumbnail(format!("Unable to resize: {}", e.to_string())).res_no_rollback())?;
 
     if let Err(e) = wand.set_image_format("webp") {
         warn!("{:?}", e);
@@ -90,4 +93,34 @@ pub fn generate_thumbnail(thumbnail_type: PictureThumbnail, source_file: &Path) 
     }
 
     Ok(dest_file)
+}
+
+pub fn generate_blurhash(source_file: &Path) -> Result<String, ErrorResponder> {
+    magick_wand_genesis();
+
+    let mut wand = MagickWand::new();
+    if let Err(e) = wand.read_image(source_file.to_str().unwrap()) {
+        warn!("{:?}", e);
+        return ErrorType::UnableToCreateBlurhash(format!("Unable to read image: {}", e.to_string())).res_err_no_rollback();
+    }
+
+    let size = if wand.get_image_width() > wand.get_image_height() {
+        (4, 3)
+    } else if wand.get_image_width() == wand.get_image_height() {
+        (3, 3)
+    } else {
+        (3, 4)
+    };
+
+    let in_size = (wand.get_image_width(), wand.get_image_height());
+
+    wand.thumbnail_image(in_size.0, in_size.1)
+        .map_err(|e| ErrorType::UnableToCreateBlurhash(format!("Unable to resize: {}", e.to_string())).res_no_rollback())?;
+
+    let raw_data = wand
+        .export_image_pixels(0, 0, in_size.0, in_size.1, "RGBA")
+        .ok_or(ErrorType::UnableToCreateBlurhash("Unable to export image pixels".to_string()).res_no_rollback())?;
+
+    blurhash::encode(size.0 as u32, size.1 as u32, in_size.0 as u32, in_size.1 as u32, raw_data.as_slice())
+        .map_err(|e| ErrorType::UnableToCreateBlurhash(format!("Can’t encode: {}", e.to_string())).res_no_rollback())
 }

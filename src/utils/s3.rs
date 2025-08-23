@@ -66,10 +66,10 @@ impl PictureStorer {
         }
     }
 
-    pub async fn store_picture_from_file(&self, picture_thumbnail: PictureThumbnail, id: i64, path: &Path) -> Result<(), ErrorResponder> {
+    pub async fn store_picture_from_file(&self, picture_thumbnail: usize, id: i64, path: &Path) -> Result<(), ErrorResponder> {
         self.client
             .put_object()
-            .bucket(BUCKETS[picture_thumbnail as usize])
+            .bucket(BUCKETS[picture_thumbnail])
             .key(id.to_string())
             .body(
                 ByteStream::from_path(path)

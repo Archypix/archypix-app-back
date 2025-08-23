@@ -57,6 +57,7 @@ pub struct Picture {
     /// 1 decimal, maximum 1000.0
     pub f_number: Option<BigDecimal>,
     pub size_ko: i32,
+    pub blurhash: Option<String>,
 }
 #[derive(Debug, PartialEq, JsonSchema, Serialize)]
 pub struct PictureDetails {
@@ -122,73 +123,6 @@ pub struct MixedPictureDetails {
 }
 
 impl Picture {
-    pub fn list_all(conn: &mut DBConn, user_id: i32, deleted: bool, shared: Option<bool>) -> Result<Vec<ListPictureData>, ErrorResponder> {
-        let include_owned = !shared.unwrap_or(false);
-        let include_shared = shared.unwrap_or(true);
-
-        let mut pictures: Vec<ListPictureData> = Vec::new();
-
-        if include_owned {
-            pictures = pictures::table
-                .filter(pictures::dsl::owner_id.eq(user_id))
-                .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
-                .select((
-                    pictures::id,
-                    pictures::name,
-                    pictures::width,
-                    pictures::height,
-                    pictures::creation_date,
-                    pictures::edition_date,
-                ))
-                .load::<(i64, String, i16, i16, NaiveDateTime, NaiveDateTime)>(conn)
-                .map(|vec| {
-                    vec.into_iter()
-                        .map(|(id, name, width, height, creation_date, edition_date)| ListPictureData {
-                            id,
-                            name,
-                            width,
-                            height,
-                            creation_date,
-                            edition_date,
-                        })
-                        .collect()
-                })
-                .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?;
-        }
-        if include_shared {
-            pictures.append(
-                &mut pictures::table
-                    .inner_join(groups_pictures::table.on(groups_pictures::dsl::picture_id.eq(pictures::dsl::id)))
-                    .inner_join(shared_groups::table.on(shared_groups::dsl::group_id.eq(groups_pictures::dsl::group_id)))
-                    .filter(shared_groups::dsl::user_id.eq(user_id))
-                    .filter(pictures::dsl::deleted_date.is_null().eq(!deleted))
-                    .select((
-                        pictures::id,
-                        pictures::name,
-                        pictures::width,
-                        pictures::height,
-                        pictures::creation_date,
-                        pictures::edition_date,
-                    ))
-                    .load::<(i64, String, i16, i16, NaiveDateTime, NaiveDateTime)>(conn)
-                    .map(|vec| {
-                        vec.into_iter()
-                            .map(|(id, name, width, height, creation_date, edition_date)| ListPictureData {
-                                id,
-                                name,
-                                width,
-                                height,
-                                creation_date,
-                                edition_date,
-                            })
-                            .collect()
-                    })
-                    .map_err(|e| ErrorType::DatabaseError("Failed to get pictures".to_string(), e).res())?,
-            );
-        }
-        Ok(pictures)
-    }
-
     /// Get a list of pictures based on the query. This function guaranties that the user has the right to access the requested pictures.
     pub fn query(conn: &mut DBConn, user_id: i32, query: PicturesQuery, page_size: i64) -> Result<Vec<ListPictureData>, ErrorResponder> {
         assert_ne!(query.page, 0, "Page number must be greater than 0");
@@ -304,18 +238,20 @@ impl Picture {
                 pictures::height,
                 pictures::creation_date,
                 pictures::edition_date,
+                pictures::blurhash,
             ))
             .distinct()
-            .load::<(i64, String, i16, i16, NaiveDateTime, NaiveDateTime)>(conn)
+            .load::<(i64, String, i16, i16, NaiveDateTime, NaiveDateTime, Option<String>)>(conn)
             .map(|vec| {
                 vec.into_iter()
-                    .map(|(id, name, width, height, creation_date, edition_date)| ListPictureData {
+                    .map(|(id, name, width, height, creation_date, edition_date, blurhash)| ListPictureData {
                         id,
                         name,
                         width,
                         height,
                         creation_date,
                         edition_date,
+                        blurhash,
                     })
                     .collect()
             })
@@ -398,12 +334,14 @@ impl Picture {
         name: String,
         metadata: Option<rexiv2::Metadata>,
         size_ko: i32,
+        blurhash: Option<String>,
     ) -> Result<Picture, ErrorResponder> {
         let mut p = Picture::from(metadata);
         p.owner_id = user_id;
         p.author_id = user_id;
         p.name = name;
         p.size_ko = size_ko;
+        p.blurhash = blurhash;
 
         insert_into(pictures::table)
             .values((
@@ -429,9 +367,10 @@ impl Picture {
                 pictures::dsl::iso_speed.eq(p.iso_speed),
                 pictures::dsl::f_number.eq(p.f_number),
                 pictures::dsl::size_ko.eq(p.size_ko),
+                pictures::dsl::blurhash.eq(p.blurhash),
             ))
             .get_result(conn)
-            .map_err(|e| ErrorType::DatabaseError("Failed to insert user".to_string(), e).res())
+            .map_err(|e| ErrorType::DatabaseError("Failed to insert picture".to_string(), e).res())
     }
 
     pub fn get_pictures_details(conn: &mut DBConn, user_id: i32, picture_ids: Vec<i64>) -> Result<Vec<Picture>, ErrorResponder> {

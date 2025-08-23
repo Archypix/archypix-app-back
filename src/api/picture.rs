@@ -1,19 +1,19 @@
 use crate::api::query_pictures::{PictureFilter, PictureSort, PicturesQuery};
 use crate::database::database::{DBConn, DBPool};
-use crate::database::picture::picture::{MixedPicture, MixedPictureDetails, Picture, PictureDetails};
+use crate::database::picture::picture::{MixedPictureDetails, Picture, PictureDetails};
 use crate::database::picture::picture_tag::PictureTag;
-use crate::database::schema::pictures::{edition_date, width};
 use crate::database::user::user::User;
 use crate::grouping::grouping_process::group_pictures;
 use crate::utils::errors_catcher::{err_transaction, ErrorResponder, ErrorResponse, ErrorType};
 use crate::utils::s3::PictureStorer;
-use crate::utils::thumbnail::{generate_thumbnail, PictureThumbnail, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};
+use crate::utils::thumbnail::{generate_blurhash, generate_thumbnail, PictureThumbnail, ORIGINAL_TEMP_DIR, THUMBS_TEMP_DIR};
 use aws_smithy_types::byte_stream::ByteStream;
 use chrono::NaiveDateTime;
+use diesel::dsl::update;
+use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use rand::random;
 use rocket::form::Form;
 use rocket::fs::TempFile;
-use rocket::futures::future::always_ready;
 use rocket::response::Responder;
 use rocket::serde::json::Json;
 use rocket::serde::Serialize;
@@ -22,10 +22,14 @@ use rocket_okapi::gen::OpenApiGenerator;
 use rocket_okapi::okapi::openapi3::Responses;
 use rocket_okapi::response::OpenApiResponderInner;
 use rocket_okapi::{openapi, JsonSchema};
-use schemars::gen::SchemaGenerator;
-use schemars::schema::{Schema, SchemaObject};
+use schemars::{
+    gen::SchemaGenerator,
+    schema::{InstanceType, Schema, SchemaObject, StringValidation},
+};
 use serde::Deserialize;
-use std::collections::HashSet;
+use serde_with::base64::Base64;
+use serde_with::serde_as;
+use std::collections::HashMap;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use strum::IntoEnumIterator;
@@ -96,9 +100,42 @@ pub async fn add_picture(
         // Read EXIF metadata
         let meta = rexiv2::Metadata::new_from_path(path).ok();
 
+        // Generating thumbnails
+        let mut thumbnail_error = None;
+        let mut blurhash = None;
+        let mut thumbnails = HashMap::new();
+        for thumbnail_type in PictureThumbnail::iter() {
+            if thumbnail_type == PictureThumbnail::Original {
+                continue;
+            }
+            let thumbnail_path = generate_thumbnail(thumbnail_type, &path);
+
+            match thumbnail_path {
+                Ok(thumbnail_path) => {
+                    thumbnails.insert(thumbnail_type as usize, thumbnail_path.clone());
+                    // Generating tiny thumbnail
+                    if thumbnail_type == PictureThumbnail::Small {
+                        match generate_blurhash(&thumbnail_path) {
+                            Ok(tiny_thumb) => {
+                                blurhash = Some(tiny_thumb);
+                            }
+                            Err(e) => {
+                                thumbnail_error = Some(ErrorResponse::from(e));
+                                break;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    thumbnail_error = Some(ErrorResponse::from(e));
+                    break;
+                }
+            }
+        }
+
         // Database operations
         let picture = err_transaction(conn, |conn| {
-            let picture = Picture::insert(conn, user.id, file_name.clone(), meta, file_size_ko)?;
+            let picture = Picture::insert(conn, user.id, file_name.clone(), meta, file_size_ko, blurhash)?;
             let pictures = vec![picture.id];
             // Adding default tags
             PictureTag::add_default_tags(conn, user.id, &pictures)?;
@@ -109,7 +146,7 @@ pub async fn add_picture(
             task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
                     picture_storer
-                        .store_picture_from_file(PictureThumbnail::Original, picture.id, &path)
+                        .store_picture_from_file(PictureThumbnail::Original as usize, picture.id, &path)
                         .await
                 })
             })?;
@@ -117,21 +154,12 @@ pub async fn add_picture(
             Ok(picture)
         })?;
 
-        // Generating thumbnails
-        let mut thumbnail_error = None;
-        for thumbnail_type in PictureThumbnail::iter() {
-            if thumbnail_type == PictureThumbnail::Original {
-                continue;
-            }
-            let thumbnail_path = generate_thumbnail(thumbnail_type, &path);
-
-            let error = if let Ok(thumbnail_path) = thumbnail_path {
-                picture_storer.store_picture_from_file(thumbnail_type, picture.id, &thumbnail_path).await
-            } else {
-                thumbnail_path.map(|_| ())
-            };
-            if let Err(e) = error {
+        // Uploading thumbnails to S3
+        for (thumbnail_type, thumbnail_path) in thumbnails {
+            let res = picture_storer.store_picture_from_file(thumbnail_type, picture.id, &thumbnail_path).await;
+            if let Err(e) = res {
                 thumbnail_error = Some(ErrorResponse::from(e));
+                break;
             }
         }
 
@@ -203,22 +231,7 @@ pub struct ListPictureData {
     pub(crate) height: i16,
     pub(crate) creation_date: NaiveDateTime,
     pub(crate) edition_date: NaiveDateTime,
-}
-
-/// List all pictures
-#[openapi(tag = "Picture")]
-#[get("/pictures?<deleted>")]
-pub async fn list_pictures(db: &State<DBPool>, user: User, deleted: bool) -> Result<Json<Vec<ListPictureData>>, ErrorResponder> {
-    let conn: &mut DBConn = &mut db.get().unwrap();
-
-    let query = PicturesQuery {
-        filters: vec![PictureFilter::Deleted { invert: !deleted }],
-        sorts: vec![PictureSort::CreationDate { ascend: true }],
-        page: 2,
-    };
-
-    let pictures = Picture::query(conn, user.id, query, 100)?;
-    Ok(Json(pictures))
+    pub(crate) blurhash: Option<String>,
 }
 
 #[derive(JsonSchema, Deserialize, Debug)]

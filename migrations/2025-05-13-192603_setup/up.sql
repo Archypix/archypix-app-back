@@ -108,6 +108,7 @@ CREATE TABLE "pictures"
     "iso_speed"         INT4,
     "f_number"          DECIMAL(4, 1),
     "size_ko"           INT4                NOT NULL,
+    "blurhash" VARCHAR(28),
     FOREIGN KEY ("author_id") REFERENCES "users" ("id"),
     FOREIGN KEY ("owner_id") REFERENCES "users" ("id")
 );

@@ -58,6 +58,7 @@ impl From<Metadata> for Picture {
             iso_speed: extract_iso(&metadata),
             f_number: rational_to_big_decimal(metadata.get_tag_rational("Exif.Photo.FNumber"), 1),
             size_ko: 0,
+            blurhash: None,
         }
     }
 }
@@ -94,6 +95,7 @@ impl From<Option<Metadata>> for Picture {
             iso_speed: None,
             f_number: None,
             size_ko: 0,
+            blurhash: None,
         }
     }
 }

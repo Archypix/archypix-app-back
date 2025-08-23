@@ -160,6 +160,7 @@ table! {
         iso_speed -> Nullable<Int4>,
         f_number -> Nullable<Decimal>,
         size_ko -> Int4,
+        blurhash -> Nullable<Varchar>,
     }
 }
 joinable!(pictures -> users (owner_id));

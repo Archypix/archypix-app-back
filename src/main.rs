@@ -17,9 +17,8 @@ use crate::api::groups::manual_groups::{
     okapi_add_operation_for_remove_pictures_from_group_, remove_pictures_from_group,
 };
 use crate::api::picture::{
-    add_picture, get_picture, get_picture_details, get_pictures_details, list_pictures, okapi_add_operation_for_add_picture_,
-    okapi_add_operation_for_get_picture_, okapi_add_operation_for_get_picture_details_, okapi_add_operation_for_get_pictures_details_,
-    okapi_add_operation_for_list_pictures_,
+    add_picture, get_picture, get_picture_details, get_pictures_details, okapi_add_operation_for_add_picture_, okapi_add_operation_for_get_picture_,
+    okapi_add_operation_for_get_picture_details_, okapi_add_operation_for_get_pictures_details_,
 };
 use crate::api::query_pictures::{okapi_add_operation_for_query_pictures_, query_pictures};
 use crate::api::tags::{
@@ -28,6 +27,7 @@ use crate::api::tags::{
     okapi_add_operation_for_patch_tag_group_, patch_tag_group,
 };
 use crate::database::database::{get_connection, get_connection_pool};
+use crate::database::picture::picture::Picture;
 use crate::utils::errors_catcher::{bad_request, internal_error, not_found, unauthorized, unprocessable_entity};
 use crate::utils::s3::PictureStorer;
 use crate::utils::thumbnail::create_temp_directories;
@@ -144,7 +144,6 @@ async fn rocket() -> _ {
                 add_picture,
                 get_picture,
                 query_pictures,
-                list_pictures,
                 get_pictures_details,
                 get_picture_details,
                 // Tags
